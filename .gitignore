@@ -44,3 +44,9 @@ next-env.d.ts
 .claude
 .windsurf
 .agents
+
+# allow the env template
+!.env.example
+
+# uploaded documents (private files)
+/storage

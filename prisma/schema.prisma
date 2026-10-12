@@ -1,7 +1,5 @@
-// This is your Prisma schema file,
+// Gazellekey International - database schema (SRS v2.0, Section 6)
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +8,849 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ─────────────────────────────── Enums ───────────────────────────────
+
+enum Role {
+  CUSTOMER
+  STAFF
+  FINANCE
+  ADMIN
+  SUPPLIER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BANNED
+}
+
+enum Division {
+  TRAVEL
+  EVENTS
+  GEMS
+  VEHICLES
+  IMPORT
+  EXPORT
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum EnquiryStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_CUSTOMER
+  QUOTED
+  CONVERTED
+  CLOSED_LOST
+  CANCELLED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  REVISED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  IN_FULFILMENT
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  CARD_ONLINE
+  OTHER
+}
+
+enum DocumentType {
+  PASSPORT
+  VISA_CHECKLIST
+  VISA_DOCUMENT
+  TICKET
+  ITINERARY
+  INSURANCE_POLICY
+  CONFIRMATION
+  CERTIFICATE
+  VALUATION
+  OWNERSHIP
+  INVOICE
+  PACKING_LIST
+  PERMIT
+  SHIPPING_RECORD
+  OTHER
+}
+
+// PUBLIC = anyone, CUSTOMER = owner + staff, STAFF = staff only,
+// RESTRICTED = authorised staff only, every view is audit-logged
+enum DocumentAccess {
+  PUBLIC
+  CUSTOMER
+  STAFF
+  RESTRICTED
+}
+
+enum EntityType {
+  CUSTOMER
+  ENQUIRY
+  QUOTATION
+  ORDER
+  PAYMENT
+  VISA_CASE
+  TICKET_REQUEST
+  INSURANCE_REQUEST
+  TOUR_PACKAGE
+  EVENT
+  EVENT_REGISTRATION
+  GEM_ITEM
+  VEHICLE_LISTING
+  TRADE_PRODUCT
+  SUPPLIER
+  SHIPMENT
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PricingMode {
+  FIXED
+  ON_REQUEST
+}
+
+enum Availability {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum TourType {
+  OUTBOUND
+  INBOUND
+}
+
+enum VisaStage {
+  ENQUIRY
+  DOCUMENTS_REQUESTED
+  DOCUMENTS_RECEIVED
+  SUBMITTED
+  DECISION_RECEIVED
+  CLOSED
+}
+
+enum TicketStatus {
+  REQUESTED
+  QUOTED
+  AWAITING_SUPPLIER_CONFIRMATION
+  CONFIRMED
+  ISSUED
+  CANCELLED
+}
+
+enum InsuranceStatus {
+  REQUESTED
+  QUOTED
+  POLICY_ISSUED
+  CANCELLED
+}
+
+enum EventType {
+  TRADE_SHOW
+  EXHIBITION
+  WORKSHOP
+  CONFERENCE
+  FOOD_FESTIVAL
+  SPORTS_TOURNAMENT
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum GemItemType {
+  GEMSTONE
+  JEWELLERY
+}
+
+enum VehicleListingType {
+  NEW_VEHICLE
+  USED_VEHICLE
+  SPARE_PART
+  HEAVY_MACHINERY
+}
+
+enum TradeDirection {
+  IMPORT
+  EXPORT
+}
+
+enum TradeCategory {
+  // Import groups
+  SPORTS_ITEMS
+  SHOES
+  CLOTHES
+  FANCY_ITEMS
+  ELECTRICAL_ITEMS
+  COMPUTERS_HARDWARE_PHONES
+  FOOD_ITEMS
+  POWER_HAND_TOOLS
+  // Export groups
+  COFFEE
+  CHOCOLATE
+  TEA
+  SPICES
+  FRUITS_VEGETABLES
+}
+
+enum ShipmentStatus {
+  ORDER_CONFIRMED
+  GOODS_READY
+  DOCUMENTS_PREPARED
+  SHIPPED
+  IN_TRANSIT
+  ARRIVED_CLEARED
+  DELIVERED
+  DELAYED
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// ─────────────────────────── Shared platform ───────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  phone        String?    @unique
+  firstName    String
+  lastName     String
+  password     String
+  role         Role       @default(CUSTOMER)
+  status       UserStatus @default(ACTIVE)
+  privileges   String[]   @default([])
+  divisions    Division[] @default([]) // divisions a STAFF user works in
+  profileImage String     @default("images/default-profile.png")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  lastLogin    DateTime?
+
+  customer           Customer?
+  assignedEnquiries  Enquiry[]          @relation("EnquiryAssignee")
+  enquiryNotes       EnquiryNote[]
+  quotationsCreated  Quotation[]        @relation("QuotationCreator")
+  paymentsConfirmed  Payment[]          @relation("PaymentConfirmer")
+  refundsProcessed   Refund[]
+  documentsUploaded  Document[]
+  auditLogs          AuditLog[]
+  visaCases          VisaCase[]         @relation("VisaAssignee")
+  ticketRequests     TicketRequest[]    @relation("TicketAssignee")
+  insuranceRequests  InsuranceRequest[] @relation("InsuranceAssignee")
+}
+
+model Customer {
+  id          String       @id @default(uuid())
+  reference   String       @unique
+  type        CustomerType @default(INDIVIDUAL)
+  firstName   String
+  lastName    String?
+  companyName String?
+  email       String       @unique
+  phone       String?
+  country     String?
+  address     String?
+  notes       String?
+  userId      String?      @unique
+  user        User?        @relation(fields: [userId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  enquiries          Enquiry[]
+  quotations         Quotation[]
+  orders             Order[]
+  payments           Payment[]
+  documents          Document[]
+  notifications      Notification[]
+  visaCases          VisaCase[]
+  ticketRequests     TicketRequest[]
+  insuranceRequests  InsuranceRequest[]
+  eventRegistrations EventRegistration[]
+}
+
+model Enquiry {
+  id           String        @id @default(uuid())
+  reference    String        @unique
+  division     Division
+  serviceType  String? // e.g. VISA, OUTBOUND_TOUR, AIR_TICKET, ORGANISE_EVENT
+  subject      String
+  message      String
+  priority     Priority      @default(NORMAL)
+  status       EnquiryStatus @default(NEW)
+  source       String        @default("WEBSITE")
+  details      Json? // division-specific form fields
+  itemType     EntityType? // catalogue item the enquiry is about
+  itemId       String?
+  customerId   String
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  assignedToId String?
+  assignedTo   User?         @relation("EnquiryAssignee", fields: [assignedToId], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  notes            EnquiryNote[]
+  quotations       Quotation[]
+  visaCase         VisaCase?
+  ticketRequest    TicketRequest?
+  insuranceRequest InsuranceRequest?
+
+  @@index([division, status])
+  @@index([assignedToId])
+}
+
+model EnquiryNote {
+  id         String   @id @default(uuid())
+  enquiryId  String
+  enquiry    Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  body       String
+  isInternal Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+model Quotation {
+  id            String          @id @default(uuid())
+  reference     String          @unique
+  division      Division
+  status        QuotationStatus @default(DRAFT)
+  enquiryId     String?
+  enquiry       Enquiry?        @relation(fields: [enquiryId], references: [id])
+  customerId    String
+  customer      Customer        @relation(fields: [customerId], references: [id])
+  currency      String
+  subtotal      Decimal         @db.Decimal(14, 2)
+  discount      Decimal         @default(0) @db.Decimal(14, 2)
+  tax           Decimal         @default(0) @db.Decimal(14, 2)
+  total         Decimal         @db.Decimal(14, 2)
+  validUntil    DateTime
+  terms         String?
+  shippingTerms String? // e.g. FOB, CIF (trade)
+  notes         String?
+  revisedFromId String? // the quotation this one replaces
+  createdById   String
+  createdBy     User            @relation("QuotationCreator", fields: [createdById], references: [id])
+  sentAt        DateTime?
+  respondedAt   DateTime?
+  responseNote  String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  items QuotationItem[]
+  order Order?
+
+  @@index([division, status])
+}
+
+model QuotationItem {
+  id          String      @id @default(uuid())
+  quotationId String
+  quotation   Quotation   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  description String
+  itemType    EntityType?
+  itemId      String?
+  quantity    Decimal     @db.Decimal(14, 3)
+  unit        String      @default("unit")
+  unitPrice   Decimal     @db.Decimal(14, 2)
+  lineTotal   Decimal     @db.Decimal(14, 2)
+  sortOrder   Int         @default(0)
+}
+
+// A booking (travel/events) or an order (gems, vehicles, trade)
+model Order {
+  id            String      @id @default(uuid())
+  reference     String      @unique
+  division      Division
+  status        OrderStatus @default(PENDING)
+  quotationId   String?     @unique
+  quotation     Quotation?  @relation(fields: [quotationId], references: [id])
+  customerId    String
+  customer      Customer    @relation(fields: [customerId], references: [id])
+  supplierId    String?
+  supplier      Supplier?   @relation(fields: [supplierId], references: [id])
+  currency      String
+  total         Decimal     @db.Decimal(14, 2)
+  amountPaid    Decimal     @default(0) @db.Decimal(14, 2)
+  shippingTerms String?
+  details       Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  items     OrderItem[]
+  payments  Payment[]
+  shipments Shipment[]
+
+  @@index([division, status])
+}
+
+model OrderItem {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  description String
+  itemType    EntityType?
+  itemId      String?
+  quantity    Decimal     @db.Decimal(14, 3)
+  unit        String      @default("unit")
+  unitPrice   Decimal     @db.Decimal(14, 2)
+  lineTotal   Decimal     @db.Decimal(14, 2)
+  sortOrder   Int         @default(0)
+}
+
+// Raw card details are NEVER stored (FR-SH-07) - only the provider reference.
+model Payment {
+  id                String        @id @default(uuid())
+  reference         String        @unique
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id])
+  customerId        String
+  customer          Customer      @relation(fields: [customerId], references: [id])
+  amount            Decimal       @db.Decimal(14, 2)
+  currency          String
+  method            PaymentMethod
+  status            PaymentStatus @default(PENDING)
+  providerReference String?
+  note              String?
+  refundedAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  confirmedById     String?
+  confirmedBy       User?         @relation("PaymentConfirmer", fields: [confirmedById], references: [id])
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  refunds Refund[]
+
+  @@index([status])
+}
+
+model Refund {
+  id                String   @id @default(uuid())
+  paymentId         String
+  payment           Payment  @relation(fields: [paymentId], references: [id])
+  amount            Decimal  @db.Decimal(14, 2)
+  currency          String
+  reason            String
+  providerReference String?
+  processedById     String
+  processedBy       User     @relation(fields: [processedById], references: [id])
+  createdAt         DateTime @default(now())
+}
+
+model Document {
+  id           String         @id @default(uuid())
+  type         DocumentType
+  title        String
+  fileName     String
+  storageKey   String         @unique
+  mimeType     String
+  size         Int
+  accessLevel  DocumentAccess @default(STAFF)
+  division     Division?
+  entityType   EntityType
+  entityId     String
+  customerId   String?
+  customer     Customer?      @relation(fields: [customerId], references: [id])
+  uploadedById String
+  uploadedBy   User           @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime       @default(now())
+
+  @@index([entityType, entityId])
+  @@index([customerId])
+}
+
+// Every message sent to a customer is stored = communication history (FR-SH-09)
+model Notification {
+  id         String              @id @default(uuid())
+  channel    NotificationChannel
+  recipient  String
+  subject    String?
+  body       String
+  status     NotificationStatus  @default(QUEUED)
+  error      String?
+  customerId String?
+  customer   Customer?           @relation(fields: [customerId], references: [id])
+  entityType EntityType?
+  entityId   String?
+  createdAt  DateTime            @default(now())
+  sentAt     DateTime?
+
+  @@index([customerId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model SiteContent {
+  id          String        @id @default(uuid())
+  key         String        @unique // e.g. home.hero, about.page, banner.main
+  title       String
+  body        Json
+  status      PublishStatus @default(DRAFT)
+  updatedById String?
+  updatedAt   DateTime      @updatedAt
+}
+
+// Running numbers for references such as TRV-ENQ-2026-00001
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+// ─────────────────────────────── Travel ───────────────────────────────
+
+model TourPackage {
+  id             String        @id @default(uuid())
+  slug           String        @unique
+  title          String
+  tourType       TourType
+  destination    String
+  summary        String
+  itinerary      Json // [{ day, title, description }]
+  durationDays   Int
+  departureDates DateTime[]    @default([])
+  isCustomisable Boolean       @default(false) // private / custom tours
+  inclusions     String[]      @default([])
+  exclusions     String[]      @default([])
+  minGroupSize   Int?
+  maxGroupSize   Int?
+  pricingMode    PricingMode   @default(ON_REQUEST)
+  price          Decimal?      @db.Decimal(14, 2)
+  currency       String?
+  images         String[]      @default([])
+  status         PublishStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model VisaCase {
+  id                 String    @id @default(uuid())
+  reference          String    @unique
+  enquiryId          String?   @unique
+  enquiry            Enquiry?  @relation(fields: [enquiryId], references: [id])
+  customerId         String
+  customer           Customer  @relation(fields: [customerId], references: [id])
+  destinationCountry String
+  visaType           String
+  stage              VisaStage @default(ENQUIRY)
+  applicants         Json // [{ fullName, nationality, dateOfBirth }]
+  checklist          Json // [{ item, received }]
+  decision           String?
+  notes              String?
+  assignedToId       String?
+  assignedTo         User?     @relation("VisaAssignee", fields: [assignedToId], references: [id])
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model TicketRequest {
+  id                String       @id @default(uuid())
+  reference         String       @unique
+  enquiryId         String?      @unique
+  enquiry           Enquiry?     @relation(fields: [enquiryId], references: [id])
+  customerId        String
+  customer          Customer     @relation(fields: [customerId], references: [id])
+  tripType          String // ONE_WAY, RETURN, MULTI_CITY
+  segments          Json // [{ origin, destination, date, flightNumber? }]
+  passengers        Json // [{ fullName, type: ADULT|CHILD|INFANT }]
+  passengerCount    Int
+  cabinClass        String?
+  status            TicketStatus @default(REQUESTED)
+  fareAmount        Decimal?     @db.Decimal(14, 2)
+  currency          String?
+  airline           String?
+  supplierReference String? // required before CONFIRMED (FR-TRV-06)
+  pnr               String?
+  ticketNumbers     String[]     @default([])
+  notes             String?
+  assignedToId      String?
+  assignedTo        User?        @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+model InsuranceRequest {
+  id           String          @id @default(uuid())
+  reference    String          @unique
+  enquiryId    String?         @unique
+  enquiry      Enquiry?        @relation(fields: [enquiryId], references: [id])
+  customerId   String
+  customer     Customer        @relation(fields: [customerId], references: [id])
+  travellers   Json // [{ fullName, dateOfBirth }]
+  destination  String
+  startDate    DateTime
+  endDate      DateTime
+  coverageType String?
+  status       InsuranceStatus @default(REQUESTED)
+  premium      Decimal?        @db.Decimal(14, 2)
+  currency     String?
+  insurer      String?
+  policyNumber String?
+  notes        String?
+  assignedToId String?
+  assignedTo   User?           @relation("InsuranceAssignee", fields: [assignedToId], references: [id])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+// ─────────────────────────────── Events ───────────────────────────────
+
+model Event {
+  id               String        @id @default(uuid())
+  slug             String        @unique
+  name             String
+  eventType        EventType
+  description      String
+  venue            String
+  city             String?
+  country          String?
+  startDate        DateTime
+  endDate          DateTime
+  organiser        String?
+  capacity         Int? // null = no capacity control
+  registeredCount  Int           @default(0)
+  registrationOpen Boolean       @default(true)
+  fee              Decimal?      @db.Decimal(14, 2) // null = free event
+  currency         String?
+  terms            String?
+  images           String[]      @default([])
+  status           PublishStatus @default(DRAFT)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  registrations EventRegistration[]
+}
+
+model EventRegistration {
+  id           String             @id @default(uuid())
+  reference    String             @unique
+  eventId      String
+  event        Event              @relation(fields: [eventId], references: [id])
+  customerId   String
+  customer     Customer           @relation(fields: [customerId], references: [id])
+  seats        Int                @default(1)
+  participants Json // [{ fullName, email?, phone? }]
+  status       RegistrationStatus @default(PENDING)
+  orderId      String? // set when the event has a fee
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([eventId, status])
+}
+
+// ─────────────────────────── Gems & Jewellery ───────────────────────────
+
+model GemItem {
+  id            String        @id @default(uuid())
+  sku           String        @unique
+  name          String
+  itemType      GemItemType
+  category      String // e.g. Blue Sapphire, Ring, Necklace
+  description   String
+  weight        Decimal?      @db.Decimal(10, 3)
+  weightUnit    String        @default("ct")
+  colour        String?
+  cut           String?
+  shape         String?
+  clarity       String?
+  origin        String?
+  treatment     String? // treatment disclosure, e.g. "Heated", "Untreated"
+  metal         String? // jewellery only
+  pricingMode   PricingMode   @default(ON_REQUEST)
+  price         Decimal?      @db.Decimal(14, 2)
+  currency      String?
+  supplierCost  Decimal?      @db.Decimal(14, 2) // restricted
+  sourcingNotes String? // restricted
+  supplierId    String? // restricted
+  supplier      Supplier?     @relation(fields: [supplierId], references: [id])
+  availability  Availability  @default(AVAILABLE)
+  images        String[]      @default([])
+  status        PublishStatus @default(DRAFT)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+// ─────────────────────────── Vehicles & Machinery ───────────────────────────
+
+model VehicleListing {
+  id             String             @id @default(uuid())
+  sku            String             @unique
+  listingType    VehicleListingType
+  title          String
+  description    String
+  make           String?
+  model          String?
+  year           Int?
+  condition      String?
+  mileageKm      Int?
+  operatingHours Int? // heavy machinery
+  fuelType       String?
+  transmission   String?
+  partNumber     String? // spare parts
+  compatibleWith String[]           @default([])
+  specifications Json?
+  stock          Int                @default(1)
+  pricingMode    PricingMode        @default(ON_REQUEST)
+  price          Decimal?           @db.Decimal(14, 2)
+  currency       String?
+  supplierCost   Decimal?           @db.Decimal(14, 2) // restricted
+  supplierId     String? // restricted
+  supplier       Supplier?          @relation(fields: [supplierId], references: [id])
+  availability   Availability       @default(AVAILABLE)
+  images         String[]           @default([])
+  status         PublishStatus      @default(DRAFT)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([listingType, status])
+}
+
+// ─────────────────────────── Import & Export (trade) ───────────────────────────
+
+model TradeProduct {
+  id              String         @id @default(uuid())
+  sku             String         @unique
+  direction       TradeDirection // separates the Import and Export divisions
+  category        TradeCategory
+  name            String
+  description     String
+  origin          String?
+  specifications  Json?
+  packaging       String?
+  unit            String         @default("kg")
+  minimumOrderQty Decimal?       @db.Decimal(14, 3)
+  stockQty        Decimal?       @db.Decimal(14, 3)
+  requiresPermit  Boolean        @default(false)
+  pricingMode     PricingMode    @default(ON_REQUEST)
+  price           Decimal?       @db.Decimal(14, 2)
+  currency        String?
+  supplierCost    Decimal?       @db.Decimal(14, 2) // restricted
+  supplierId      String? // restricted
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
+  images          String[]       @default([])
+  status          PublishStatus  @default(DRAFT)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([direction, category, status])
+}
+
+model Supplier {
+  id               String       @id @default(uuid())
+  reference        String       @unique
+  name             String
+  contactName      String?
+  email            String?
+  phone            String?
+  country          String?
+  address          String?
+  productsSupplied String[]     @default([])
+  paymentTerms     String?
+  notes            String?
+  divisions        Division[]   @default([])
+  status           RecordStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  gemItems      GemItem[]
+  vehicles      VehicleListing[]
+  tradeProducts TradeProduct[]
+  orders        Order[]
+}
+
+model Shipment {
+  id                String          @id @default(uuid())
+  reference         String          @unique
+  orderId           String
+  order             Order           @relation(fields: [orderId], references: [id])
+  direction         TradeDirection
+  status            ShipmentStatus  @default(ORDER_CONFIRMED)
+  carrier           String?
+  trackingNumber    String?
+  origin            String?
+  destination       String?
+  incoterm          String?
+  expectedDeparture DateTime?
+  expectedArrival   DateTime?
+  actualArrival     DateTime?
+  isDelayed         Boolean         @default(false)
+  delayReason       String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  milestones ShipmentMilestone[]
+}
+
+model ShipmentMilestone {
+  id          String         @id @default(uuid())
+  shipmentId  String
+  shipment    Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status      ShipmentStatus
+  location    String?
+  note        String?
+  occurredAt  DateTime       @default(now())
+  createdById String?
 }
