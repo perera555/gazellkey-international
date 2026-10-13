@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import {
+  AppointmentStatus,
   EnquiryStatus,
   OrderStatus,
   PaymentStatus,
@@ -35,7 +36,12 @@ export async function GET(request: NextRequest) {
       OrderStatus.IN_FULFILMENT,
     ];
 
+    const now = new Date();
+    const in7Days = new Date(now.getTime() + 7 * 86_400_000);
+
     const [
+      appointmentsToConfirm,
+      upcomingAppointments,
       openEnquiries,
       unassignedEnquiries,
       myEnquiries,
@@ -46,6 +52,33 @@ export async function GET(request: NextRequest) {
       enquiriesByDivision,
       recentEnquiries,
     ] = await Promise.all([
+      prisma.appointment.count({
+        where: {
+          ...inMyDivisions,
+          status: AppointmentStatus.REQUESTED,
+          startAt: { gte: now },
+        },
+      }),
+      prisma.appointment.findMany({
+        where: {
+          ...inMyDivisions,
+          status: { in: [AppointmentStatus.REQUESTED, AppointmentStatus.CONFIRMED] },
+          startAt: { gte: now, lte: in7Days },
+        },
+        orderBy: { startAt: "asc" },
+        take: 8,
+        select: {
+          id: true,
+          reference: true,
+          division: true,
+          subject: true,
+          mode: true,
+          status: true,
+          startAt: true,
+          endAt: true,
+          customer: { select: customerSummaryFields },
+        },
+      }),
       prisma.enquiry.count({
         where: { ...inMyDivisions, status: { in: openEnquiryStatuses } },
       }),
@@ -104,7 +137,9 @@ export async function GET(request: NextRequest) {
           activeOrders,
           paymentsToConfirm,
           delayedShipments,
+          appointmentsToConfirm,
         },
+        upcomingAppointments,
         openEnquiriesByDivision: enquiriesByDivision.map((row) => ({
           division: row.division,
           count: row._count._all,

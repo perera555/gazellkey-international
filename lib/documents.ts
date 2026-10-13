@@ -2,6 +2,8 @@ import prisma from "@/lib/prisma";
 import {
   Division,
   DocumentAccess,
+  DocumentApproval,
+  DocumentType,
   EntityType,
   Role,
   TradeDirection,
@@ -66,6 +68,14 @@ export async function resolveDocumentOwner(
     case EntityType.INSURANCE_REQUEST: {
       const record = await prisma.insuranceRequest.findUnique({ where: { id: entityId } });
       return record && { customerId: record.customerId, division: Division.TRAVEL, assignedToId: record.assignedToId };
+    }
+    case EntityType.APPOINTMENT: {
+      const record = await prisma.appointment.findUnique({ where: { id: entityId } });
+      return record && {
+        customerId: record.customerId,
+        division: record.division,
+        assignedToId: record.assignedToId,
+      };
     }
     case EntityType.EVENT_REGISTRATION: {
       const record = await prisma.eventRegistration.findUnique({ where: { id: entityId } });
@@ -156,4 +166,22 @@ export async function canViewDocument(
     document.customerId == customerIdOfUser &&
     document.accessLevel != DocumentAccess.STAFF
   );
+}
+
+// Document types that need an admin's approval when a CUSTOMER uploads them
+// (identity and legal papers). Everything else, and every staff upload, is
+// accepted straight away. Keep in step with the admin's lib/documents.ts.
+export const APPROVAL_REQUIRED_TYPES: DocumentType[] = [
+  DocumentType.PASSPORT,
+  DocumentType.VISA_DOCUMENT,
+  DocumentType.OWNERSHIP,
+  DocumentType.PERMIT,
+  DocumentType.CERTIFICATE,
+  DocumentType.VALUATION,
+];
+
+export function approvalFor(type: DocumentType, uploadedByStaff: boolean) {
+  return !uploadedByStaff && APPROVAL_REQUIRED_TYPES.includes(type)
+    ? DocumentApproval.PENDING
+    : DocumentApproval.NOT_REQUIRED;
 }

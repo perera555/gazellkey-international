@@ -7,10 +7,12 @@ import { requirePrivilege } from "@/utils/authentication";
 import { handleError } from "@/utils/handleError";
 import { nextReference } from "@/utils/reference";
 import { audit } from "@/utils/audit";
-import { searchParam } from "@/utils/params";
+import { enumParam, searchParam } from "@/utils/params";
+import { RecordStatus } from "@/app/generated/prisma/enums";
 import getPageInfo, { buildPagination } from "@/utils/pageInfoRetrivel";
 
-// GET /api/customers?search=perera
+// GET /api/customers?search=perera&status=INACTIVE
+// Deleted (INACTIVE) customers are left out unless status=INACTIVE is asked for.
 export async function GET(request: NextRequest) {
   const auth = await requirePrivilege(request, PRIVILEGES.CUSTOMERS_READ);
   if (auth.error) {
@@ -21,7 +23,9 @@ export async function GET(request: NextRequest) {
     const params = getPageInfo(request);
     const search = searchParam(request, "search");
 
-    const where: Prisma.CustomerWhereInput = search
+    const where: Prisma.CustomerWhereInput = {
+      status: enumParam(request, "status", RecordStatus) ?? RecordStatus.ACTIVE,
+      ...(search
       ? {
           OR: [
             { reference: { contains: search, mode: "insensitive" } },
@@ -32,7 +36,8 @@ export async function GET(request: NextRequest) {
             { phone: { contains: search } },
           ],
         }
-      : {};
+      : {}),
+    };
 
     const [customers, totalCount] = await Promise.all([
       prisma.customer.findMany({

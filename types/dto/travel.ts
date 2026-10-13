@@ -22,6 +22,7 @@ const TourBaseSchema = z.object({
   title: z.string().trim().min(3).max(200),
   tourType: z.enum(TourType),
   destination: z.string().trim().min(2).max(200),
+  country: z.string().trim().max(100).optional(), // used by the country search
   summary: z.string().trim().min(10).max(5000),
   itinerary: z
     .array(

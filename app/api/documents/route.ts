@@ -7,7 +7,7 @@ import {
 } from "@/app/generated/prisma/enums";
 import { PRIVILEGES } from "@/lib/privileges";
 import { getCustomerForUser } from "@/lib/customers";
-import { canViewDocument, resolveDocumentOwner } from "@/lib/documents";
+import { approvalFor, canViewDocument, resolveDocumentOwner } from "@/lib/documents";
 import { deleteStoredFile, saveFile } from "@/lib/storage";
 import { DocumentUploadRequestSchema } from "@/types/dto/document";
 import {
@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
           mimeType: file.type,
           size: file.size,
           accessLevel: accessLevel,
+          approval: approvalFor(body.type, isStaff), // some customer uploads wait for an admin
           division: owner.division,
           entityType: body.entityType,
           entityId: body.entityId,
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
         action: "document.uploaded",
         entityType: body.entityType,
         entityId: body.entityId,
-        details: { documentId: document.id, type: body.type, accessLevel },
+        details: { documentId: document.id, type: body.type, accessLevel, approval: document.approval },
       });
 
       return NextResponse.json(

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CustomerType } from "@/app/generated/prisma/enums";
+import { CustomerType, RecordStatus } from "@/app/generated/prisma/enums";
 
 export const CustomerCreateRequestSchema = z.object({
   type: z.enum(CustomerType).optional(),
@@ -13,6 +13,9 @@ export const CustomerCreateRequestSchema = z.object({
   notes: z.string().trim().max(5000).optional(),
 });
 
-export const CustomerUpdateRequestSchema = CustomerCreateRequestSchema.partial();
+// status: INACTIVE = deleted (soft delete), ACTIVE = restored
+export const CustomerUpdateRequestSchema = CustomerCreateRequestSchema.partial().extend({
+  status: z.enum(RecordStatus).optional(),
+});
 
 export type CustomerCreateRequest = z.infer<typeof CustomerCreateRequestSchema>;

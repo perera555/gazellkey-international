@@ -8,6 +8,8 @@ export const PRIVILEGES = {
   CUSTOMERS_EDIT: "customers:edit",
   ENQUIRIES_READ: "enquiries:read",
   ENQUIRIES_EDIT: "enquiries:edit",
+  APPOINTMENTS_READ: "appointments:read",
+  APPOINTMENTS_EDIT: "appointments:edit",
   QUOTATIONS_READ: "quotations:read",
   QUOTATIONS_EDIT: "quotations:edit",
   ORDERS_READ: "orders:read",
@@ -19,6 +21,7 @@ export const PRIVILEGES = {
   DOCUMENTS_READ: "documents:read",
   DOCUMENTS_EDIT: "documents:edit",
   DOCUMENTS_RESTRICTED: "documents:restricted", // passports and personal documents
+  DOCUMENTS_APPROVE: "documents:approve", // approve / cancel customer uploads (admins)
   CATALOGUE_EDIT: "catalogue:edit",
   TRAVEL_CASES: "travel:cases", // visa, ticket and insurance cases
   EVENTS_REGISTRATIONS: "events:registrations",
@@ -29,6 +32,7 @@ export const PRIVILEGES = {
   REPORTS_READ: "reports:read",
   AUDIT_READ: "audit:read",
   CONTENT_EDIT: "content:edit",
+  REVIEWS_MODERATE: "reviews:moderate", // hide / delete customer reviews (admins)
 } as const;
 
 export type Privilege = (typeof PRIVILEGES)[keyof typeof PRIVILEGES];
@@ -47,6 +51,8 @@ export const ROLE_DEFAULT_PRIVILEGES: Record<Role, Privilege[]> = {
     P.CUSTOMERS_EDIT,
     P.ENQUIRIES_READ,
     P.ENQUIRIES_EDIT,
+    P.APPOINTMENTS_READ,
+    P.APPOINTMENTS_EDIT,
     P.QUOTATIONS_READ,
     P.QUOTATIONS_EDIT,
     P.ORDERS_READ,
@@ -65,6 +71,7 @@ export const ROLE_DEFAULT_PRIVILEGES: Record<Role, Privilege[]> = {
   FINANCE: [
     P.CUSTOMERS_READ,
     P.ENQUIRIES_READ,
+    P.APPOINTMENTS_READ,
     P.QUOTATIONS_READ,
     P.ORDERS_READ,
     P.PAYMENTS_READ,

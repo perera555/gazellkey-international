@@ -11,13 +11,15 @@ import { enumParam, searchParam } from "@/utils/params";
 import getPageInfo, { buildPagination } from "@/utils/pageInfoRetrivel";
 
 // Public tour catalogue (FR-TRV-03, FR-SH-01)
-// /api/travel/tours?tourType=OUTBOUND&search=maldives
+// /api/travel/tours?tourType=OUTBOUND&country=thailand&search=phuket
+// "search" also matches the country; "country" filters by country only.
 export async function GET(request: NextRequest) {
   try {
     const params = getPageInfo(request);
     const user = await getUser(request);
     const isEditor = isCatalogueEditor(user, Division.TRAVEL);
     const search = searchParam(request, "search");
+    const country = searchParam(request, "country");
 
     const where: Prisma.TourPackageWhereInput = {
       // visitors only see published tours; editors may filter by status
@@ -25,10 +27,12 @@ export async function GET(request: NextRequest) {
         ? enumParam(request, "status", PublishStatus)
         : PublishStatus.PUBLISHED,
       tourType: enumParam(request, "tourType", TourType),
+      country: country ? { contains: country, mode: "insensitive" } : undefined,
       OR: search
         ? [
             { title: { contains: search, mode: "insensitive" } },
             { destination: { contains: search, mode: "insensitive" } },
+            { country: { contains: search, mode: "insensitive" } },
           ]
         : undefined,
     };

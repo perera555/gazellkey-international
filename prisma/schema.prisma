@@ -112,6 +112,14 @@ enum DocumentAccess {
   RESTRICTED
 }
 
+// Customer uploads of some document types wait for an admin (lib/documents.ts)
+enum DocumentApproval {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  CANCELLED
+}
+
 enum EntityType {
   CUSTOMER
   ENQUIRY
@@ -129,6 +137,7 @@ enum EntityType {
   TRADE_PRODUCT
   SUPPLIER
   SHIPMENT
+  APPOINTMENT
 }
 
 enum NotificationChannel {
@@ -260,6 +269,26 @@ enum RecordStatus {
   INACTIVE
 }
 
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// HIDDEN = removed by an admin (bad / abusive review), kept for the record
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+}
+
+enum AppointmentMode {
+  IN_PERSON
+  PHONE
+  VIDEO
+}
+
 // ─────────────────────────── Shared platform ───────────────────────────
 
 model User {
@@ -284,11 +313,16 @@ model User {
   quotationsCreated  Quotation[]        @relation("QuotationCreator")
   paymentsConfirmed  Payment[]          @relation("PaymentConfirmer")
   refundsProcessed   Refund[]
-  documentsUploaded  Document[]
+  documentsUploaded  Document[]        @relation("DocumentUploader")
+  documentsReviewed  Document[]        @relation("DocumentReviewer")
   auditLogs          AuditLog[]
   visaCases          VisaCase[]         @relation("VisaAssignee")
   ticketRequests     TicketRequest[]    @relation("TicketAssignee")
   insuranceRequests  InsuranceRequest[] @relation("InsuranceAssignee")
+  appointments       Appointment[]      @relation("AppointmentAssignee")
+  reviews            Review[]           @relation("ReviewAuthor")
+  reviewsRemoved     Review[]           @relation("ReviewRemover")
+  galleryPhotos      GalleryPhoto[]
 }
 
 model Customer {
@@ -303,6 +337,7 @@ model Customer {
   country     String?
   address     String?
   notes       String?
+  status      RecordStatus @default(ACTIVE) // INACTIVE = deleted (soft delete)
   userId      String?      @unique
   user        User?        @relation(fields: [userId], references: [id])
   createdAt   DateTime     @default(now())
@@ -318,6 +353,58 @@ model Customer {
   ticketRequests     TicketRequest[]
   insuranceRequests  InsuranceRequest[]
   eventRegistrations EventRegistration[]
+  appointments       Appointment[]
+  reviews            Review[]
+}
+
+// A customer's star rating and comment, shown on the website at once.
+// Admins can hide a bad review (status HIDDEN) or delete it.
+model Review {
+  id            String       @id @default(uuid())
+  division      Division     @default(TRAVEL)
+  tourId        String? // the tour package reviewed, if any
+  tour          TourPackage? @relation(fields: [tourId], references: [id], onDelete: SetNull)
+  rating        Int // 1 - 5 stars
+  title         String?
+  body          String
+  tripDate      DateTime? // when they travelled
+  status        ReviewStatus @default(PUBLISHED)
+  customerId    String
+  customer      Customer     @relation(fields: [customerId], references: [id])
+  userId        String
+  user          User         @relation("ReviewAuthor", fields: [userId], references: [id])
+  removedReason String?
+  removedById   String?
+  removedBy     User?        @relation("ReviewRemover", fields: [removedById], references: [id])
+  removedAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([status, division, createdAt])
+  @@index([tourId, status])
+}
+
+// Photos from past trips for the website gallery. The picture is either an
+// uploaded file (storageKey, served by /api/gallery/[id]/image) or a URL.
+model GalleryPhoto {
+  id          String        @id @default(uuid())
+  division    Division      @default(TRAVEL)
+  title       String
+  caption     String?
+  place       String? // e.g. "Ella, Sri Lanka"
+  country     String?
+  takenAt     DateTime? // trip date
+  imageUrl    String? // external URL or a site path like /images/travel-ella.jpg
+  storageKey  String?       @unique // uploaded file (lib/storage.ts)
+  mimeType    String?
+  sortOrder   Int           @default(0) // lower first
+  status      PublishStatus @default(PUBLISHED)
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([division, status, sortOrder])
 }
 
 model Enquiry {
@@ -345,7 +432,43 @@ model Enquiry {
   visaCase         VisaCase?
   ticketRequest    TicketRequest?
   insuranceRequest InsuranceRequest?
+  appointments     Appointment[]
 
+  @@index([division, status])
+  @@index([assignedToId])
+}
+
+// A meeting with a customer (office visit, phone or video call).
+// CONFIRMED appointments are copied to the company Google Calendar.
+model Appointment {
+  id               String            @id @default(uuid())
+  reference        String            @unique
+  division         Division
+  serviceType      String?
+  subject          String
+  message          String?
+  mode             AppointmentMode   @default(IN_PERSON)
+  startAt          DateTime
+  endAt            DateTime
+  status           AppointmentStatus @default(REQUESTED)
+  location         String? // office address for IN_PERSON
+  meetingLink      String? // video call link for VIDEO
+  staffNotes       String? // internal, never shown to the customer
+  cancelReason     String?
+  customerId       String
+  customer         Customer          @relation(fields: [customerId], references: [id])
+  enquiryId        String?
+  enquiry          Enquiry?          @relation(fields: [enquiryId], references: [id])
+  assignedToId     String?
+  assignedTo       User?             @relation("AppointmentAssignee", fields: [assignedToId], references: [id])
+  googleEventId    String?
+  googleEventLink  String?
+  calendarSyncedAt DateTime?
+  calendarError    String? // last Google Calendar error, null when in sync
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([startAt, status])
   @@index([division, status])
   @@index([assignedToId])
 }
@@ -503,11 +626,17 @@ model Document {
   customerId   String?
   customer     Customer?      @relation(fields: [customerId], references: [id])
   uploadedById String
-  uploadedBy   User           @relation(fields: [uploadedById], references: [id])
+  uploadedBy   User           @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  approval     DocumentApproval @default(NOT_REQUIRED)
+  reviewedById String?
+  reviewedBy   User?          @relation("DocumentReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String? // reason when an admin cancels
   createdAt    DateTime       @default(now())
 
   @@index([entityType, entityId])
   @@index([customerId])
+  @@index([approval])
 }
 
 // Every message sent to a customer is stored = communication history (FR-SH-09)
@@ -567,6 +696,7 @@ model TourPackage {
   title          String
   tourType       TourType
   destination    String
+  country        String? // searched on the Travel page, e.g. "Thailand"
   summary        String
   itinerary      Json // [{ day, title, description }]
   durationDays   Int
@@ -583,6 +713,8 @@ model TourPackage {
   status         PublishStatus @default(DRAFT)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  reviews        Review[]
+  @@index([country])
 }
 
 model VisaCase {

@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { DocumentAccess, QuotationStatus } from "@/app/generated/prisma/enums";
+import { customerAppointmentView } from "@/lib/appointments";
 import { getCustomerForUser } from "@/lib/customers";
 import { requireUser } from "@/utils/authentication";
 import { handleError, notFound } from "@/utils/handleError";
@@ -11,6 +12,7 @@ type ResourceContext = { params: Promise<{ resource: string }> };
 // Customer account area (SRS 9.1): only the signed-in customer's own records.
 //   /api/me/enquiries  /api/me/quotations  /api/me/orders  /api/me/payments
 //   /api/me/documents  /api/me/travel  /api/me/events  /api/me/messages
+//   /api/me/appointments  /api/me/reviews
 export async function GET(request: NextRequest, { params }: ResourceContext) {
   const { resource } = await params;
   const auth = await requireUser(request);
@@ -166,6 +168,46 @@ export async function GET(request: NextRequest, { params }: ResourceContext) {
           prisma.eventRegistration.count({ where: mine }),
         ]);
         break;
+
+      case "appointments": {
+        const [appointments, count] = await Promise.all([
+          prisma.appointment.findMany({
+            where: mine,
+            skip: page.skip,
+            take: page.take,
+            orderBy: { startAt: "desc" },
+          }),
+          prisma.appointment.count({ where: mine }),
+        ]);
+        data = appointments.map(customerAppointmentView); // no staff notes
+        totalCount = count;
+        break;
+      }
+
+      case "reviews": {
+        // by account, so reviews still show if the customer record changes
+        const own = { userId: auth.user.id };
+        [data, totalCount] = await Promise.all([
+          prisma.review.findMany({
+            where: own,
+            ...paging,
+            select: {
+              id: true,
+              division: true,
+              rating: true,
+              title: true,
+              body: true,
+              tripDate: true,
+              status: true,
+              removedReason: true, // why an admin removed it
+              createdAt: true,
+              tour: { select: { id: true, slug: true, title: true } },
+            },
+          }),
+          prisma.review.count({ where: own }),
+        ]);
+        break;
+      }
 
       case "messages":
         [data, totalCount] = await Promise.all([
