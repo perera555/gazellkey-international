@@ -26,7 +26,13 @@ export type CalendarEvent = {
   start: Date;
   end: Date;
   timeZone: string;
-  appointmentId: string;
+  // which record the event belongs to (stored on the event, see getBusyTimes)
+  appointmentId?: string;
+  enquiryId?: string;
+  // phone/app pop-up reminders, minutes before the start (default: the calendar's own)
+  reminderMinutes?: number[];
+  colorId?: string; // Google's event colours: "5" yellow, "10" green, "11" red ...
+  transparent?: boolean; // "show as free": a to-do note, not a meeting
 };
 
 function config() {
@@ -119,8 +125,17 @@ function toGoogleEvent(event: CalendarEvent) {
     location: event.location ?? undefined,
     start: { dateTime: event.start.toISOString(), timeZone: event.timeZone },
     end: { dateTime: event.end.toISOString(), timeZone: event.timeZone },
-    extendedProperties: { private: { appointmentId: event.appointmentId } },
-    reminders: { useDefault: true },
+    extendedProperties: {
+      private: {
+        ...(event.appointmentId ? { appointmentId: event.appointmentId } : {}),
+        ...(event.enquiryId ? { enquiryId: event.enquiryId } : {}),
+      },
+    },
+    reminders: event.reminderMinutes
+      ? { useDefault: false, overrides: event.reminderMinutes.map((minutes) => ({ method: "popup", minutes })) }
+      : { useDefault: true },
+    colorId: event.colorId,
+    transparency: event.transparent ? "transparent" : "opaque",
   };
 }
 
@@ -165,8 +180,8 @@ type GoogleEventTime = { dateTime?: string; date?: string };
 
 // Busy periods added by hand in the company calendar (holidays, staff leave,
 // other meetings ...) so the website does not offer those times.
-// Events created for appointments are skipped - the database already knows
-// those, and one division's meeting must not block the other divisions.
+// Events created for appointments and enquiries are skipped - the database
+// already knows those, and one division's meeting must not block the others.
 export async function getBusyTimes(from: Date, to: Date, utcOffset: string) {
   const query = new URLSearchParams({
     timeMin: from.toISOString(),
@@ -180,7 +195,7 @@ export async function getBusyTimes(from: Date, to: Date, utcOffset: string) {
     transparency?: string;
     start: GoogleEventTime;
     end: GoogleEventTime;
-    extendedProperties?: { private?: { appointmentId?: string } };
+    extendedProperties?: { private?: { appointmentId?: string; enquiryId?: string } };
   }[] = data.items ?? [];
 
   return events
@@ -188,7 +203,8 @@ export async function getBusyTimes(from: Date, to: Date, utcOffset: string) {
       (event) =>
         event.status != "cancelled" &&
         event.transparency != "transparent" && // "show as free"
-        !event.extendedProperties?.private?.appointmentId,
+        !event.extendedProperties?.private?.appointmentId &&
+        !event.extendedProperties?.private?.enquiryId,
     )
     .map((event) => ({
       // all-day events (a public holiday) have a local "date", no time

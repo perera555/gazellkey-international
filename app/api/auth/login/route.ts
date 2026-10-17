@@ -3,7 +3,12 @@ import { compare } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { UserStatus } from "@/app/generated/prisma/enums";
 import { LoginRequestSchema } from "@/types/dto/user";
-import { createLoginToken, setLoginCookie } from "@/utils/authentication";
+import {
+  createLoginToken,
+  REMEMBER_ME_SECONDS,
+  SESSION_SECONDS,
+  setLoginCookie,
+} from "@/utils/authentication";
 import { handleError } from "@/utils/handleError";
 
 export async function POST(request: NextRequest) {
@@ -41,7 +46,10 @@ export async function POST(request: NextRequest) {
       data: { lastLogin: new Date() },
     });
 
-    const token = await createLoginToken(user.id);
+    const token = await createLoginToken(
+      user.id,
+      body.remember ? REMEMBER_ME_SECONDS : SESSION_SECONDS,
+    );
 
     const response = NextResponse.json({
       message: "Login successful",
@@ -55,7 +63,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    setLoginCookie(response, token);
+    setLoginCookie(response, token, body.remember ? REMEMBER_ME_SECONDS : null);
     return response;
   } catch (error) {
     return handleError(error);

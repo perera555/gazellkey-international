@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/app/generated/prisma/client";
 import {
   Division,
@@ -10,6 +10,7 @@ import {
 import { PRIVILEGES } from "@/lib/privileges";
 import { findOrCreateCustomer } from "@/lib/customers";
 import { notifyCustomer } from "@/lib/notifications";
+import { addEnquiryReminder, adminUrl, customerContact, smsOffice } from "@/lib/officeAlerts";
 import { customerSummaryFields, staffNameFields } from "@/lib/selects";
 import { EnquiryCreateRequestSchema } from "@/types/dto/enquiry";
 import {
@@ -74,6 +75,19 @@ export async function POST(request: NextRequest) {
       body: `Dear ${enquiry.customer.firstName},\n\nThank you for contacting Gazellekey International. Your enquiry "${enquiry.subject}" has been received with reference ${enquiry.reference}. Our team will reply soon.`,
       entityType: EntityType.ENQUIRY,
       entityId: enquiry.id,
+    });
+
+    // Office alerts after the customer has their answer: an SMS to the
+    // office phone and a "Reply to enquiry" reminder in Google Calendar
+    after(async () => {
+      await smsOffice(
+        `Gazellekey: New ${enquiry.division.toLowerCase()} enquiry ${enquiry.reference}: "${enquiry.subject.slice(0, 60)}". ` +
+          `${customerContact(enquiry.customer)}. ` +
+          `Open: ${adminUrl(`/enquiries?search=${encodeURIComponent(enquiry.reference)}`)}`,
+        EntityType.ENQUIRY,
+        enquiry.id,
+      );
+      await addEnquiryReminder(enquiry);
     });
 
     return NextResponse.json(

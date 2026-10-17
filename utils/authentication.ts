@@ -6,6 +6,10 @@ import { RequestUserType } from "@/types/requestUser";
 
 export const LOGIN_COOKIE = "login-token";
 export const TOKEN_LIFETIME_SECONDS = 60 * 60 * 24 * 7; // 1 week
+// "Remember me" ticked on the login form
+export const REMEMBER_ME_SECONDS = 60 * 60 * 24 * 30; // 30 days
+// "Remember me" not ticked: signed out when the browser closes, or after a day
+export const SESSION_SECONDS = 60 * 60 * 24;
 
 export function getSecret() {
   const secretText = process.env.JOSE_SECRET;
@@ -15,7 +19,7 @@ export function getSecret() {
   return new TextEncoder().encode(secretText); // Convert the secret key to a Uint8Array
 }
 
-export async function createLoginToken(userId: string) {
+export async function createLoginToken(userId: string, lifetimeSeconds = TOKEN_LIFETIME_SECONDS) {
   // Only the user id goes in the token. Role, privileges and status are
   // read fresh from the database on each request, so a ban or a role
   // change works immediately instead of after the token expires.
@@ -23,12 +27,17 @@ export async function createLoginToken(userId: string) {
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()
-    .setExpirationTime(`${TOKEN_LIFETIME_SECONDS}s`)
+    .setExpirationTime(`${lifetimeSeconds}s`)
     .sign(getSecret());
 }
 
-// Puts the login token in the httpOnly cookie (password and Google sign-in)
-export function setLoginCookie(response: NextResponse, token: string) {
+// Puts the login token in the httpOnly cookie (password and Google sign-in).
+// maxAge null = a browser-session cookie, deleted when the browser closes.
+export function setLoginCookie(
+  response: NextResponse,
+  token: string,
+  maxAge: number | null = TOKEN_LIFETIME_SECONDS,
+) {
   response.cookies.set({
     name: LOGIN_COOKIE,
     value: token,
@@ -36,7 +45,7 @@ export function setLoginCookie(response: NextResponse, token: string) {
     secure: process.env.NODE_ENV == "production", // HTTPS only in production
     sameSite: "lax",
     path: "/",
-    maxAge: TOKEN_LIFETIME_SECONDS,
+    ...(maxAge == null ? {} : { maxAge: maxAge }),
   });
 }
 

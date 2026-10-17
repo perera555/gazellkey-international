@@ -4,6 +4,7 @@ import {
   NotificationChannel,
   NotificationStatus,
 } from "@/app/generated/prisma/enums";
+import { sendSms } from "@/lib/sms";
 
 // NFR-11: email/SMS go through a replaceable interface.
 // To use a real provider (Resend, SendGrid, Twilio, Dialog/Mobitel SMS ...)
@@ -17,15 +18,21 @@ export interface NotificationProvider {
   }): Promise<void>; // throw an error if sending fails
 }
 
-const consoleProvider: NotificationProvider = {
+// SMS goes out through lib/sms.ts (Notify.lk); email is only logged until an
+// email provider is added here.
+const defaultProvider: NotificationProvider = {
   async send(message) {
+    if (message.channel == NotificationChannel.SMS) {
+      await sendSms(message.to, message.body);
+      return;
+    }
     console.log(
       `[${message.channel}] to ${message.to}: ${message.subject ?? ""}\n${message.body}`,
     );
   },
 };
 
-let provider: NotificationProvider = consoleProvider;
+let provider: NotificationProvider = defaultProvider;
 
 export function setNotificationProvider(newProvider: NotificationProvider) {
   provider = newProvider;

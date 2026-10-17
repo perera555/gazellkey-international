@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/app/generated/prisma/client";
 import {
   AppointmentMode,
@@ -14,9 +14,11 @@ import {
   lockSlot,
   MODE_LABELS,
   slotEnd,
+  syncAppointmentCalendar,
 } from "@/lib/appointments";
 import { findOrCreateCustomer } from "@/lib/customers";
 import { notifyCustomer } from "@/lib/notifications";
+import { adminUrl, customerContact, smsOffice } from "@/lib/officeAlerts";
 import { customerSummaryFields, staffNameFields } from "@/lib/selects";
 import { AppointmentCreateRequestSchema } from "@/types/dto/appointment";
 import {
@@ -94,6 +96,19 @@ export async function POST(request: NextRequest) {
       body: `Dear ${appointment.customer.firstName},\n\nThank you for booking with Gazellekey International. We received your appointment request about "${appointment.subject}".\n\nWhen: ${formatAppointmentTime(appointment.startAt)}\nType: ${MODE_LABELS[appointment.mode]}\n\nYour reference is ${appointment.reference}. We will email you again as soon as a member of our team confirms the time.`,
       entityType: EntityType.APPOINTMENT,
       entityId: appointment.id,
+    });
+
+    // Office alerts after the customer has their answer: a yellow "To confirm"
+    // event in the office Google Calendar and an SMS to the office phone
+    after(async () => {
+      await syncAppointmentCalendar(appointment.id);
+      await smsOffice(
+        `Gazellekey: New appointment ${appointment.reference}, ${formatAppointmentTime(appointment.startAt)} (${MODE_LABELS[appointment.mode]}). ` +
+          `${customerContact(appointment.customer)}. ` +
+          `Confirm: ${adminUrl(`/appointments/${appointment.id}`)}`,
+        EntityType.APPOINTMENT,
+        appointment.id,
+      );
     });
 
     return NextResponse.json(

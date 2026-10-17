@@ -5,6 +5,7 @@ import { ALL_PRIVILEGES } from "@/lib/privileges";
 export const LoginRequestSchema = z.object({
   email: z.email().trim().toLowerCase(),
   password: z.string().min(1, "Password is required"),
+  remember: z.boolean().default(false), // "Remember me": stay signed in for 30 days
 });
 
 const passwordSchema = z

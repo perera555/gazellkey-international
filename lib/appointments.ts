@@ -10,6 +10,7 @@ import {
   isCalendarEnabled,
   saveCalendarEvent,
 } from "@/lib/googleCalendar";
+import { adminUrl } from "@/lib/officeAlerts";
 import { ApiError } from "@/utils/handleError";
 import { Db } from "@/utils/reference";
 
@@ -261,9 +262,10 @@ export function customerAppointmentView<
   };
 }
 
-// Copies the appointment to Google Calendar: CONFIRMED and COMPLETED have an
-// event, every other status has none. Never throws - a Google problem is
-// stored in calendarError so staff can see it and press "Sync again".
+// Copies the appointment to the office Google Calendar: REQUESTED (yellow,
+// "To confirm"), CONFIRMED and COMPLETED have an event, every other status
+// has none. Never throws - a Google problem is stored in calendarError so
+// staff can see it and press "Sync again".
 export async function syncAppointmentCalendar(appointmentId: string) {
   if (!isCalendarEnabled()) {
     return;
@@ -280,7 +282,9 @@ export async function syncAppointmentCalendar(appointmentId: string) {
     return;
   }
 
+  const toConfirm = appointment.status == AppointmentStatus.REQUESTED;
   const wantsEvent =
+    toConfirm ||
     appointment.status == AppointmentStatus.CONFIRMED ||
     appointment.status == AppointmentStatus.COMPLETED;
 
@@ -297,8 +301,9 @@ export async function syncAppointmentCalendar(appointmentId: string) {
       const event = await saveCalendarEvent(
         {
           appointmentId: appointment.id,
-          summary: `${appointment.subject} - ${customerName} [${appointment.reference}]`,
+          summary: `${toConfirm ? "To confirm: " : ""}${appointment.subject} - ${customerName} [${appointment.reference}]`,
           description: [
+            toConfirm ? `NEW REQUEST - please confirm it in the admin portal:\n${adminUrl(`/appointments/${appointment.id}`)}\n` : null,
             `Appointment ${appointment.reference} (${appointment.division})`,
             `Type: ${MODE_LABELS[appointment.mode]}`,
             `Customer: ${customerName}${customer.companyName ? `, ${customer.companyName}` : ""}`,
@@ -317,6 +322,9 @@ export async function syncAppointmentCalendar(appointmentId: string) {
           start: appointment.startAt,
           end: appointment.endAt,
           timeZone: APPOINTMENT_HOURS.timeZone,
+          // phone reminders: the day before and an hour before (plus 15 min once confirmed)
+          reminderMinutes: toConfirm ? [24 * 60, 60] : [24 * 60, 60, 15],
+          colorId: toConfirm ? "5" : "10", // yellow = to confirm, green = confirmed
         },
         appointment.googleEventId,
       );
