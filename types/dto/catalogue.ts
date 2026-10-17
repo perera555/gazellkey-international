@@ -148,8 +148,15 @@ const TradeProductBaseSchema = z.object({
   minimumOrderQty: z.number().positive().optional(),
   stockQty: z.number().nonnegative().optional(),
   requiresPermit: z.boolean().default(false),
+  // labelled ("was") price, shown crossed out next to the fixed price
+  compareAtPrice: moneySchema.nullable().optional(),
   ...pricingFields,
 });
+
+export function compareAtPriceValid(price: number | null | undefined, compareAtPrice: number | null | undefined) {
+  return compareAtPrice == null || (price != null && compareAtPrice > price);
+}
+export const compareAtPriceMessage = "The labelled price must be higher than the price";
 
 export const TradeProductCreateRequestSchema = TradeProductBaseSchema.refine(
   fixedPriceRule,
@@ -157,6 +164,9 @@ export const TradeProductCreateRequestSchema = TradeProductBaseSchema.refine(
 ).refine((data) => categoryMatchesDirection(data.direction, data.category), {
   message: "This category does not belong to the selected direction",
   path: ["category"],
+}).refine((data) => compareAtPriceValid(data.price, data.compareAtPrice), {
+  message: compareAtPriceMessage,
+  path: ["compareAtPrice"],
 });
 
 export const TradeProductUpdateRequestSchema = toUpdateSchema(TradeProductBaseSchema);

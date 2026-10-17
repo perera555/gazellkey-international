@@ -65,6 +65,29 @@ export const TourCreateRequestSchema = TourBaseSchema.refine(
 );
 export const TourUpdateRequestSchema = toUpdateSchema(TourBaseSchema);
 
+// ── Hotels ──
+const HotelBaseSchema = z.object({
+  slug: slugSchema,
+  name: z.string().trim().min(2).max(200),
+  city: z.string().trim().min(2).max(100),
+  country: z.string().trim().min(2).max(100),
+  starRating: z.number().int().min(1).max(5).optional(),
+  address: z.string().trim().max(300).optional(),
+  summary: z.string().trim().min(10).max(5000),
+  facilities: z.array(z.string().trim().min(1).max(100)).default([]),
+  roomTypes: z.array(z.string().trim().min(1).max(200)).default([]),
+  checkInTime: z.string().trim().max(20).optional(),
+  checkOutTime: z.string().trim().max(20).optional(),
+  pricingMode: z.enum(PricingMode).default(PricingMode.ON_REQUEST),
+  price: moneySchema.optional(), // "from" price per night
+  currency: currencySchema.optional(),
+  images: imageListSchema.default([]),
+  status: z.enum(PublishStatus).default(PublishStatus.DRAFT),
+});
+
+export const HotelCreateRequestSchema = HotelBaseSchema.refine(priceRule, priceRuleMessage);
+export const HotelUpdateRequestSchema = toUpdateSchema(HotelBaseSchema);
+
 // ── Visa cases (FR-TRV-01, FR-TRV-02) ──
 const ApplicantSchema = z.object({
   fullName: z.string().trim().min(1).max(200),

@@ -85,6 +85,12 @@ enum PaymentMethod {
   OTHER
 }
 
+// Payment gateway of an online card payment (lib/shop.ts)
+enum PaymentProvider {
+  STRIPE
+  PAYHERE
+}
+
 enum DocumentType {
   PASSPORT
   VISA_CHECKLIST
@@ -130,11 +136,13 @@ enum EntityType {
   TICKET_REQUEST
   INSURANCE_REQUEST
   TOUR_PACKAGE
+  HOTEL
   EVENT
   EVENT_REGISTRATION
   GEM_ITEM
   VEHICLE_LISTING
   TRADE_PRODUCT
+  SHOP_PRODUCT
   SUPPLIER
   SHIPMENT
   APPOINTMENT
@@ -584,7 +592,12 @@ model Payment {
   currency          String
   method            PaymentMethod
   status            PaymentStatus @default(PENDING)
+  provider          PaymentProvider? // card gateway; null = bank transfer, cash ...
+  // Stripe: checkout session id, then payment intent id. PayHere: payment id.
   providerReference String?
+  // Online shop: every payment of one Stripe checkout shares this reference
+  // (one cart can create an order per division) - see lib/shop.ts
+  checkoutReference String?
   note              String?
   refundedAmount    Decimal       @default(0) @db.Decimal(14, 2)
   confirmedById     String?
@@ -596,6 +609,7 @@ model Payment {
   refunds Refund[]
 
   @@index([status])
+  @@index([checkoutReference])
 }
 
 model Refund {
@@ -715,6 +729,32 @@ model TourPackage {
   updatedAt      DateTime      @updatedAt
   reviews        Review[]
   @@index([country])
+}
+
+// Hotels the Travel division books for customers (website: /hotels)
+model Hotel {
+  id           String        @id @default(uuid())
+  slug         String        @unique
+  name         String
+  city         String
+  country      String
+  starRating   Int? // 1 - 5
+  address      String?
+  summary      String
+  facilities   String[]      @default([]) // "Free Wi-Fi", "Pool" ...
+  roomTypes    String[]      @default([]) // "Deluxe double - sea view (2 guests)" ...
+  checkInTime  String? // "14:00"
+  checkOutTime String? // "12:00"
+  pricingMode  PricingMode   @default(ON_REQUEST) // FIXED = "from" price per night
+  price        Decimal?      @db.Decimal(14, 2)
+  currency     String?
+  images       String[]      @default([])
+  status       PublishStatus @default(DRAFT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([country])
+  @@index([city])
 }
 
 model VisaCase {
@@ -918,6 +958,8 @@ model TradeProduct {
   requiresPermit  Boolean        @default(false)
   pricingMode     PricingMode    @default(ON_REQUEST)
   price           Decimal?       @db.Decimal(14, 2)
+  // labelled ("was") price: shown crossed out next to a lower fixed price
+  compareAtPrice  Decimal?       @db.Decimal(14, 2)
   currency        String?
   supplierCost    Decimal?       @db.Decimal(14, 2) // restricted
   supplierId      String? // restricted
@@ -928,6 +970,39 @@ model TradeProduct {
   updatedAt       DateTime       @updatedAt
 
   @@index([direction, category, status])
+}
+
+// ─────────────────────────── Online shop (retail) ───────────────────────────
+
+// Retail goods sold only through the online shop (lib/shop.ts). Always a
+// fixed price; the website's /shop page also lists fixed-price gems,
+// vehicle parts and trade products next to these.
+model ShopProduct {
+  id             String        @id @default(uuid())
+  sku            String        @unique
+  name           String
+  category       String // e.g. Home & Living, Beauty, Gifts
+  brand          String?
+  summary        String? // one line under the name
+  description    String
+  highlights     String[]      @default([]) // key points shown as bullets
+  specifications Json?
+  unit           String        @default("item")
+  price          Decimal       @db.Decimal(14, 2)
+  // "was" price: shown crossed out with a discount badge while higher than price
+  compareAtPrice Decimal?      @db.Decimal(14, 2)
+  saleEndsAt     DateTime? // the sale (compareAtPrice) stops showing after this
+  currency       String
+  stockQty       Int           @default(0)
+  // staff of this division manage the product and fulfil its orders
+  division       Division      @default(IMPORT)
+  featured       Boolean       @default(false)
+  images         String[]      @default([])
+  status         PublishStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status, category])
 }
 
 model Supplier {

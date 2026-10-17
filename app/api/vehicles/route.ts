@@ -17,7 +17,10 @@ import { enumParam, searchParam } from "@/utils/params";
 import getPageInfo, { buildPagination } from "@/utils/pageInfoRetrivel";
 
 // Public listings (FR-VEH-01, FR-VEH-02)
-// /api/vehicles?listingType=USED_VEHICLE&make=toyota&yearFrom=2018&yearTo=2024
+// /api/vehicles?listingType=USED_VEHICLE&make=toyota&model=aqua&yearFrom=2018&yearTo=2024
+//   kind=vehicles      everything except spare parts; kind=parts = spare parts only
+//   fits=Toyota Aqua   spare parts whose "compatible with" list names this model
+//                      (or whose own make + model is this model)
 export async function GET(request: NextRequest) {
   try {
     const params = getPageInfo(request);
@@ -25,16 +28,43 @@ export async function GET(request: NextRequest) {
     const isEditor = isCatalogueEditor(user, Division.VEHICLES);
     const search = searchParam(request, "search");
     const make = searchParam(request, "make");
+    const model = searchParam(request, "model");
+    const fits = searchParam(request, "fits");
+    const kind = searchParam(request, "kind");
     const yearFrom = parseInt(searchParam(request, "yearFrom") ?? "", 10);
     const yearTo = parseInt(searchParam(request, "yearTo") ?? "", 10);
+
+    const listingType =
+      enumParam(request, "listingType", VehicleListingType) ??
+      (kind == "parts"
+        ? VehicleListingType.SPARE_PART
+        : kind == "vehicles"
+          ? { not: VehicleListingType.SPARE_PART }
+          : undefined);
+
+    const fitsWhere: Prisma.VehicleListingWhereInput[] = [];
+    if (fits) {
+      const [fitsMake, ...rest] = fits.split(" ");
+      fitsWhere.push({
+        OR: [
+          { compatibleWith: { has: fits } },
+          {
+            make: { equals: fitsMake, mode: "insensitive" },
+            model: { equals: rest.join(" "), mode: "insensitive" },
+          },
+        ],
+      });
+    }
 
     const where: Prisma.VehicleListingWhereInput = {
       status: isEditor
         ? enumParam(request, "status", PublishStatus)
         : PublishStatus.PUBLISHED,
-      listingType: enumParam(request, "listingType", VehicleListingType),
+      listingType: listingType,
       availability: enumParam(request, "availability", Availability),
       make: make ? { equals: make, mode: "insensitive" } : undefined,
+      model: model ? { equals: model, mode: "insensitive" } : undefined,
+      AND: fitsWhere.length > 0 ? fitsWhere : undefined,
       year: {
         gte: Number.isNaN(yearFrom) ? undefined : yearFrom,
         lte: Number.isNaN(yearTo) ? undefined : yearTo,

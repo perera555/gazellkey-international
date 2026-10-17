@@ -27,6 +27,19 @@ export async function createLoginToken(userId: string) {
     .sign(getSecret());
 }
 
+// Puts the login token in the httpOnly cookie (password and Google sign-in)
+export function setLoginCookie(response: NextResponse, token: string) {
+  response.cookies.set({
+    name: LOGIN_COOKIE,
+    value: token,
+    httpOnly: true, // JavaScript in the browser cannot read it
+    secure: process.env.NODE_ENV == "production", // HTTPS only in production
+    sameSite: "lax",
+    path: "/",
+    maxAge: TOKEN_LIFETIME_SECONDS,
+  });
+}
+
 export async function getUser(
   request: NextRequest,
 ): Promise<RequestUserType | null> {
@@ -83,6 +96,11 @@ export function hasPrivilege(
   }
   if (user.role == Role.ADMIN) {
     return true; // administrators have full access
+  }
+  // Privileges only count for staff. A customer (or supplier) account never
+  // gets staff powers, even if privileges were ticked on it by mistake.
+  if (!isStaffUser(user)) {
+    return false;
   }
   return user.privileges.includes(privilege);
 }
@@ -154,7 +172,8 @@ export function divisionScope(user: RequestUserType): Division[] | undefined {
   if (user.role == Role.ADMIN || user.role == Role.FINANCE) {
     return undefined;
   }
-  return user.divisions;
+  // customers and suppliers work in no division, whatever is stored on them
+  return user.role == Role.STAFF ? user.divisions : [];
 }
 
 export function canAccessDivision(

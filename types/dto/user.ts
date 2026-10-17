@@ -37,9 +37,11 @@ export const UserSelfUpdateRequestSchema = z
     firstName: z.string().trim().min(1).max(50).optional(),
     lastName: z.string().trim().min(1).max(50).optional(),
     phone: z.string().trim().max(20).optional(),
-    profileImage: z.string().trim().optional(),
   })
-  .strict(); // role, status, privileges, email, password are not allowed
+  // role, status, privileges, email, password and profileImage are not
+  // allowed (the photo changes only through POST /api/auth/photo, so nobody
+  // can point it at someone else's stored file)
+  .strict();
 
 export const UserUpdatedByAdminRequestSchema = z
   .object({

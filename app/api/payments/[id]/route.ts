@@ -1,14 +1,11 @@
 import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import {
-  EntityType,
-  OrderStatus,
-  PaymentStatus,
-  RegistrationStatus,
-} from "@/app/generated/prisma/enums";
+import { EntityType, PaymentStatus } from "@/app/generated/prisma/enums";
 import { PRIVILEGES } from "@/lib/privileges";
 import { canViewOwnedRecord } from "@/lib/access";
 import { notifyCustomer } from "@/lib/notifications";
+import { addPaymentToOrder } from "@/lib/payments";
+import { websiteUrl } from "@/lib/stripe";
 import { PaymentUpdateRequestSchema } from "@/types/dto/order";
 import {
   canAccessDivision,
@@ -16,7 +13,6 @@ import {
   requireUser,
 } from "@/utils/authentication";
 import { ApiError, handleError, notFound } from "@/utils/handleError";
-import { toCents } from "@/utils/money";
 import { audit } from "@/utils/audit";
 import { IdContext } from "@/utils/params";
 
@@ -73,6 +69,13 @@ export async function PUT(request: NextRequest, { params }: IdContext) {
     if (existing.status != PaymentStatus.PENDING) {
       throw new ApiError(409, "Only pending payments can be confirmed.");
     }
+    if (existing.provider != null) {
+      // the gateway decides; a manual answer could disagree with it
+      throw new ApiError(
+        409,
+        `Online card payments are confirmed automatically by ${existing.provider == "PAYHERE" ? "PayHere" : "Stripe"}.`,
+      );
+    }
 
     const payment = await prisma.$transaction(async (tx) => {
       // conditional update so two finance users cannot confirm it twice
@@ -91,24 +94,7 @@ export async function PUT(request: NextRequest, { params }: IdContext) {
       }
 
       if (body.status == "PAID") {
-        const order = await tx.order.update({
-          where: { id: existing.orderId },
-          data: { amountPaid: { increment: existing.amount } },
-        });
-        if (
-          order.status == OrderStatus.PENDING &&
-          toCents(order.amountPaid) >= toCents(order.total)
-        ) {
-          await tx.order.update({
-            where: { id: order.id },
-            data: { status: OrderStatus.CONFIRMED },
-          });
-          // a paid event registration is confirmed once its order is paid
-          await tx.eventRegistration.updateMany({
-            where: { orderId: order.id, status: RegistrationStatus.PENDING },
-            data: { status: RegistrationStatus.CONFIRMED },
-          });
-        }
+        await addPaymentToOrder(tx, existing);
       }
       return tx.payment.findUniqueOrThrow({ where: { id: id } });
     });
@@ -129,7 +115,7 @@ export async function PUT(request: NextRequest, { params }: IdContext) {
           : `Payment problem - ${existing.reference}`,
       body:
         body.status == "PAID"
-          ? `Dear ${existing.customer.firstName},\n\nWe received your payment of ${existing.currency} ${existing.amount.toFixed(2)} for ${existing.order.reference}. Thank you.`
+          ? `Dear ${existing.customer.firstName},\n\nWe received your payment of ${existing.currency} ${existing.amount.toFixed(2)} for ${existing.order.reference}. Thank you.\n\nYour receipt ${existing.reference} is ready to download under My account > Payments: ${websiteUrl()}/account/payments`
           : `Dear ${existing.customer.firstName},\n\nWe could not confirm payment ${existing.reference} for ${existing.order.reference}. Please contact us.`,
       entityType: EntityType.PAYMENT,
       entityId: id,

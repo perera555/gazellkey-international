@@ -3,11 +3,7 @@ import { compare } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { UserStatus } from "@/app/generated/prisma/enums";
 import { LoginRequestSchema } from "@/types/dto/user";
-import {
-  createLoginToken,
-  LOGIN_COOKIE,
-  TOKEN_LIFETIME_SECONDS,
-} from "@/utils/authentication";
+import { createLoginToken, setLoginCookie } from "@/utils/authentication";
 import { handleError } from "@/utils/handleError";
 
 export async function POST(request: NextRequest) {
@@ -59,15 +55,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    response.cookies.set({
-      name: LOGIN_COOKIE,
-      value: token,
-      httpOnly: true, // JavaScript in the browser cannot read it
-      secure: process.env.NODE_ENV == "production", // HTTPS only in production
-      sameSite: "lax",
-      path: "/",
-      maxAge: TOKEN_LIFETIME_SECONDS,
-    });
+    setLoginCookie(response, token);
     return response;
   } catch (error) {
     return handleError(error);

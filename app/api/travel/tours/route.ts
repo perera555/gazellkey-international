@@ -27,7 +27,17 @@ export async function GET(request: NextRequest) {
         ? enumParam(request, "status", PublishStatus)
         : PublishStatus.PUBLISHED,
       tourType: enumParam(request, "tourType", TourType),
-      country: country ? { contains: country, mode: "insensitive" } : undefined,
+      // a tour without a country counts under its destination (e.g. "Maldives")
+      AND: country
+        ? [
+            {
+              OR: [
+                { country: { contains: country, mode: "insensitive" } },
+                { country: null, destination: { contains: country, mode: "insensitive" } },
+              ],
+            },
+          ]
+        : undefined,
       OR: search
         ? [
             { title: { contains: search, mode: "insensitive" } },

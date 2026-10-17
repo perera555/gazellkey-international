@@ -9,7 +9,12 @@
     "db:migrate": "prisma migrate dev --config prisma7.config.ts",
     "db:generate": "prisma generate --config prisma7.config.ts",
     "seed": "tsx prisma/seed.ts",
-    "test:api": "node tests/api-flow.mjs"
+    "seed:vehicles": "tsx prisma/seed-vehicles.ts",
+    "seed:hotels": "tsx prisma/seed-hotels.ts",
+    "seed:tours": "tsx prisma/seed-tours.ts",
+    "seed:trade": "tsx prisma/seed-trade.ts",
+    "test:api": "node tests/api-flow.mjs",
+    "test:shop": "node tests/shop-flow.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -22,6 +27,7 @@
     "pg": "^8.23.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "stripe": "^23.0.0",
     "zod": "^4.6.6"
   },
   "devDependencies": {

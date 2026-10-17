@@ -92,6 +92,14 @@ export async function resolveDocumentOwner(
       const record = await prisma.tourPackage.findUnique({ where: { id: entityId } });
       return record && { ...none, division: Division.TRAVEL };
     }
+    case EntityType.HOTEL: {
+      const record = await prisma.hotel.findUnique({ where: { id: entityId } });
+      return record && { ...none, division: Division.TRAVEL };
+    }
+    case EntityType.SHOP_PRODUCT: {
+      const record = await prisma.shopProduct.findUnique({ where: { id: entityId } });
+      return record && { ...none, division: record.division };
+    }
     case EntityType.EVENT: {
       const record = await prisma.event.findUnique({ where: { id: entityId } });
       return record && { ...none, division: Division.EVENTS };

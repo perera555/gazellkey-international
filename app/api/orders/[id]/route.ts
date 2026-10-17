@@ -1,9 +1,15 @@
 import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import { EntityType, OrderStatus } from "@/app/generated/prisma/enums";
+import {
+  EntityType,
+  OrderStatus,
+  PaymentStatus,
+} from "@/app/generated/prisma/enums";
 import { PRIVILEGES } from "@/lib/privileges";
 import { canViewOwnedRecord } from "@/lib/access";
 import { notifyCustomer } from "@/lib/notifications";
+import { isShopOrder, releaseOrderStock } from "@/lib/stock";
+import { expireStaleCheckouts } from "@/lib/shop";
 import { customerSummaryFields } from "@/lib/selects";
 import { OrderUpdateRequestSchema } from "@/types/dto/order";
 import {
@@ -62,6 +68,8 @@ export async function PUT(request: NextRequest, { params }: IdContext) {
 
   try {
     const body = OrderUpdateRequestSchema.parse(await request.json());
+    // close online checkouts nobody finished, so their orders can be changed
+    await expireStaleCheckouts().catch((error) => console.error("Checkout sweep failed", error));
 
     const existing = await prisma.order.findUnique({ where: { id: id } });
     if (existing == null || !canAccessDivision(auth.user, existing.division)) {
@@ -77,15 +85,56 @@ export async function PUT(request: NextRequest, { params }: IdContext) {
       );
     }
 
-    const order = await prisma.order.update({
-      where: { id: id },
-      data: {
-        status: body.status,
-        supplierId: body.supplierId,
-        shippingTerms: body.shippingTerms,
-        details: body.details,
-      },
-      include: { customer: true },
+    const shopOrder = isShopOrder(existing);
+    if (statusChanged && shopOrder) {
+      // a card payment still open on PayHere / Stripe could be paid any moment
+      const paying = await prisma.payment.count({
+        where: {
+          orderId: id,
+          status: PaymentStatus.PENDING,
+          provider: { not: null },
+        },
+      });
+      if (paying > 0) {
+        throw new ApiError(
+          409,
+          "The customer is paying for this order online. Wait until the card payment is finished or expires (at most 60 minutes).",
+        );
+      }
+    }
+
+    const order = await prisma.$transaction(async (tx) => {
+      if (statusChanged) {
+        // conditional, so the order is cancelled (and its stock given back) once
+        const changed = await tx.order.updateMany({
+          where: { id: id, status: existing.status },
+          data: { status: body.status },
+        });
+        if (changed.count == 0) {
+          throw new ApiError(409, "This order was just changed by someone else.");
+        }
+        if (body.status == OrderStatus.CANCELLED) {
+          await releaseOrderStock(tx, id);
+          // e.g. a bank transfer that will not come any more
+          await tx.payment.updateMany({
+            where: { orderId: id, status: PaymentStatus.PENDING },
+            data: { status: PaymentStatus.FAILED, note: "Order cancelled" },
+          });
+        }
+      }
+      return tx.order.update({
+        where: { id: id },
+        data: {
+          supplierId: body.supplierId,
+          shippingTerms: body.shippingTerms,
+          // online shop orders keep their source marker (lib/stock.ts)
+          details:
+            body.details && shopOrder
+              ? { ...body.details, ...(existing.details as object) }
+              : body.details,
+        },
+        include: { customer: true },
+      });
     });
 
     if (statusChanged) {

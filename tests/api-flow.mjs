@@ -206,12 +206,20 @@ async function main() {
   r = await travelStaff.post("/api/payments", { orderId, amount: 2479.98, method: "BANK_TRANSFER", providerReference: "SLIP-001" });
   check("staff records payment (PENDING)", r.status == 201 && r.data.data?.status == "PENDING", JSON.stringify(r.data));
   const paymentId = r.data.data?.id;
+  r = await customer.get(`/api/payments/${paymentId}/receipt`);
+  check("no receipt for a pending payment (409)", r.status == 409);
   r = await travelStaff.put(`/api/payments/${paymentId}`, { status: "PAID" });
   check("staff cannot confirm payments (403)", r.status == 403);
   r = await finance.put(`/api/payments/${paymentId}`, { status: "PAID" });
   check("finance confirms payment", r.data.data?.status == "PAID", JSON.stringify(r.data));
   r = await customer.get(`/api/orders/${orderId}`);
   check("fully paid order is CONFIRMED", r.data.data?.status == "CONFIRMED", r.data.data?.status);
+  r = await customer.get(`/api/payments/${paymentId}/receipt`);
+  check("customer downloads PDF receipt", r.status == 200 && String(r.data).startsWith("%PDF"), String(r.status));
+  r = await finance.get(`/api/payments/${paymentId}/receipt`);
+  check("finance can open the receipt", r.status == 200);
+  r = await client("anonymous").get(`/api/payments/${paymentId}/receipt`);
+  check("receipt needs a login (401)", r.status == 401);
 
   r = await finance.post(`/api/payments/${paymentId}/refunds`, { amount: 5000, reason: "Too much" });
   check("refund above paid amount is refused", r.status == 400);

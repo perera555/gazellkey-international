@@ -41,22 +41,23 @@ const DIVISION_TITLES: Record<string, string> = {
   EXPORT: "Export Quotation",
 };
 
-const NAVY = rgb(0.043, 0.145, 0.271); // #0b2545
-const NAVY_DARK = rgb(0.027, 0.102, 0.188); // #071a30
-const GOLD = rgb(0.788, 0.635, 0.153); // #c9a227
+// Colours, page size and helpers are shared with the receipt (lib/receipt-pdf.ts)
+export const NAVY = rgb(0.043, 0.145, 0.271); // #0b2545
+export const NAVY_DARK = rgb(0.027, 0.102, 0.188); // #071a30
+export const GOLD = rgb(0.788, 0.635, 0.153); // #c9a227
 const TRAVEL_BLUE = rgb(0.118, 0.533, 0.898); // #1e88e5
-const GREY = rgb(0.4, 0.45, 0.52);
-const LIGHT = rgb(0.953, 0.965, 0.98); // #f3f6fa
-const TEXT = rgb(0.1, 0.14, 0.2);
+export const GREY = rgb(0.4, 0.45, 0.52);
+export const LIGHT = rgb(0.953, 0.965, 0.98); // #f3f6fa
+export const TEXT = rgb(0.1, 0.14, 0.2);
 
-const PAGE_WIDTH = 595.28; // A4
-const PAGE_HEIGHT = 841.89;
-const MARGIN = 48;
-const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+export const PAGE_WIDTH = 595.28; // A4
+export const PAGE_HEIGHT = 841.89;
+export const MARGIN = 48;
+export const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 // The built-in PDF fonts only cover Latin-1, so other characters are
 // replaced (curly quotes -> straight quotes, others -> "?").
-function clean(value: unknown) {
+export function clean(value: unknown) {
   return String(value ?? "")
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
@@ -67,21 +68,21 @@ function clean(value: unknown) {
     .replace(/[^\n\x20-\x7E\xA0-\xFF]/g, "?");
 }
 
-function money(amount: unknown, currency: string) {
+export function money(amount: unknown, currency: string) {
   const value = Number(String(amount ?? 0));
   return `${currency} ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function quantity(amount: unknown) {
+export function quantity(amount: unknown) {
   return Number(String(amount ?? 0)).toLocaleString("en-US", { maximumFractionDigits: 3 });
 }
 
-function date(value: Date | null) {
+export function date(value: Date | null) {
   return value ? value.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "";
 }
 
 // "passengerCount" / "travel_date" -> "Passenger count" / "Travel date"
-function labelOf(key: string) {
+export function labelOf(key: string) {
   const words = key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
@@ -111,7 +112,7 @@ function detailText(value: unknown): string {
   return String(value);
 }
 
-function wrap(text: string, font: PDFFont, size: number, width: number) {
+export function wrap(text: string, font: PDFFont, size: number, width: number) {
   const lines: string[] = [];
   for (const paragraph of clean(text).split("\n")) {
     let line = "";

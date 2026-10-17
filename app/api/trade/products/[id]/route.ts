@@ -9,6 +9,8 @@ import {
 } from "@/lib/catalogue";
 import {
   categoryMatchesDirection,
+  compareAtPriceMessage,
+  compareAtPriceValid,
   TradeProductUpdateRequestSchema,
 } from "@/types/dto/catalogue";
 import { getUser, requireUser } from "@/utils/authentication";
@@ -71,6 +73,14 @@ export async function PUT(request: NextRequest, { params }: IdContext) {
     }
     if (!categoryMatchesDirection(direction, body.category ?? existing.category)) {
       throw new ApiError(400, "This category does not belong to the selected direction.");
+    }
+    const price = body.price !== undefined ? body.price : existing.price && Number(existing.price);
+    const compareAtPrice =
+      body.compareAtPrice !== undefined
+        ? body.compareAtPrice
+        : existing.compareAtPrice && Number(existing.compareAtPrice);
+    if (!compareAtPriceValid(price, compareAtPrice)) {
+      throw new ApiError(400, `compareAtPrice: ${compareAtPriceMessage}`);
     }
     await assertSupplierExists(body.supplierId);
 
