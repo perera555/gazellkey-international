@@ -106,6 +106,8 @@ enum DocumentType {
   PACKING_LIST
   PERMIT
   SHIPPING_RECORD
+  CV // candidate's CV for an overseas job
+  PHOTO // passport-size photo
   OTHER
 }
 
@@ -143,6 +145,11 @@ enum EntityType {
   VEHICLE_LISTING
   TRADE_PRODUCT
   SHOP_PRODUCT
+  RENTAL_ITEM
+  RENTAL_BOOKING
+  JOB_VACANCY
+  JOB_APPLICATION
+  TEAM_MEMBER
   SUPPLIER
   SHIPMENT
   APPOINTMENT
@@ -363,6 +370,8 @@ model Customer {
   eventRegistrations EventRegistration[]
   appointments       Appointment[]
   reviews            Review[]
+  rentalBookings     RentalBooking[]
+  jobApplications    JobApplication[]
 }
 
 // A customer's star rating and comment, shown on the website at once.
@@ -639,8 +648,8 @@ model Document {
   entityId     String
   customerId   String?
   customer     Customer?      @relation(fields: [customerId], references: [id])
-  uploadedById String
-  uploadedBy   User           @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  uploadedById String? // empty = sent by a website guest (job applications)
+  uploadedBy   User?          @relation("DocumentUploader", fields: [uploadedById], references: [id])
   approval     DocumentApproval @default(NOT_REQUIRED)
   reviewedById String?
   reviewedBy   User?          @relation("DocumentReviewer", fields: [reviewedById], references: [id])
@@ -970,6 +979,254 @@ model TradeProduct {
   updatedAt       DateTime       @updatedAt
 
   @@index([direction, category, status])
+}
+
+// ─────────────────────────── Rentals (Events division) ───────────────────────────
+
+// Equipment hired out for weddings, funerals, parties ...: tents and huts,
+// chairs, tables, lighting, sound. Customers request dates and quantities on
+// the website's Rentals page; staff confirm (lib/rentals.ts). Stock is
+// counted per day: confirmed and delivered bookings hold their quantities.
+model RentalItem {
+  id             String        @id @default(uuid())
+  sku            String        @unique
+  name           String
+  category       String // e.g. Tents & huts, Chairs, Tables, Lighting
+  description    String
+  highlights     String[]      @default([])
+  specifications Json?
+  unit           String        @default("piece")
+  pricePerDay    Decimal       @db.Decimal(14, 2) // per unit, per day
+  currency       String        @default("LKR")
+  quantityOwned  Int           @default(1) // how many we can hire out at once
+  minQuantity    Int           @default(1)
+  deposit        Decimal?      @db.Decimal(14, 2) // refundable, per unit
+  featured       Boolean       @default(false)
+  images         String[]      @default([])
+  status         PublishStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  bookingItems RentalBookingItem[]
+
+  @@index([status, category])
+}
+
+enum RentalEventType {
+  WEDDING
+  FUNERAL
+  BIRTHDAY
+  RELIGIOUS
+  CORPORATE
+  PARTY
+  OTHER
+}
+
+enum RentalStatus {
+  REQUESTED // waiting for staff
+  CONFIRMED // items held for the dates
+  DELIVERED // items are at the customer
+  RETURNED // all back, booking finished
+  CANCELLED
+}
+
+model RentalBooking {
+  id             String          @id @default(uuid())
+  reference      String          @unique
+  status         RentalStatus    @default(REQUESTED)
+  eventType      RentalEventType
+  startDate      DateTime        @db.Date // first day of hire
+  endDate        DateTime        @db.Date // last day of hire (inclusive)
+  venue          String // address where the items go
+  city           String
+  guests         Int?
+  needsDelivery  Boolean         @default(true)
+  needsSetup     Boolean         @default(false)
+  message        String?
+  currency       String          @default("LKR")
+  estimatedTotal Decimal         @db.Decimal(14, 2) // items x days, when requested
+  quotedTotal    Decimal?        @db.Decimal(14, 2) // final price incl. delivery / setup
+  staffNotes     String? // internal, never shown to the customer
+  cancelReason   String?
+  customerId     String
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  items RentalBookingItem[]
+
+  @@index([status, startDate])
+}
+
+model RentalBookingItem {
+  id           String        @id @default(uuid())
+  bookingId    String
+  booking      RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  rentalItemId String
+  rentalItem   RentalItem    @relation(fields: [rentalItemId], references: [id])
+  name         String // copy of the item name when booked
+  quantity     Int
+  pricePerDay  Decimal       @db.Decimal(14, 2)
+  days         Int
+  lineTotal    Decimal       @db.Decimal(14, 2)
+
+  @@index([rentalItemId])
+}
+
+// ─────────────────────────── Overseas jobs (work visas) ───────────────────────────
+// Travel division. Staff post vacancies abroad; candidates apply from the
+// website and follow their application and interviews in My account.
+
+// How the interview shown on a vacancy works
+enum JobInterviewMode {
+  WALK_IN // come on the day with your documents
+  BY_INVITATION // shortlisted candidates are called
+  ONLINE // video interview
+}
+
+enum JobApplicationStatus {
+  APPLIED // received, not reviewed yet
+  SHORTLISTED // called for interview
+  INTERVIEWING // at least one interview scheduled / done
+  SELECTED // offered the job
+  MEDICAL // medical test (only when the country / employer needs it)
+  VISA_PROCESSING // medical, visa, SLBFE registration, ticket
+  DEPLOYED // left for the job
+  REJECTED
+  WITHDRAWN // by the candidate
+}
+
+enum InterviewStage {
+  OFFICE // our own screening interview
+  EMPLOYER // with the employer or their agent
+  TRADE_TEST // skills test
+  EMBASSY // embassy / visa interview
+  MEDICAL // medical test at an approved medical centre
+}
+
+enum InterviewResult {
+  SCHEDULED
+  PASSED
+  FAILED
+  NO_SHOW
+  CANCELLED
+}
+
+model JobVacancy {
+  id               String            @id @default(uuid())
+  slug             String            @unique
+  reference        String            @unique // e.g. GK-JOB-0001, quoted by candidates
+  title            String // e.g. Hotel Waiter
+  category         String // e.g. Hospitality, Construction, Driving
+  country          String // e.g. United Arab Emirates
+  region           String // Middle East, Europe, Asia, ...
+  city             String?
+  employer         String? // shown name, e.g. "5-star hotel group"
+  positions        Int               @default(1)
+  salaryMin        Decimal?          @db.Decimal(14, 2)
+  salaryMax        Decimal?          @db.Decimal(14, 2)
+  salaryCurrency   String            @default("USD")
+  salaryPeriod     String            @default("month")
+  contractMonths   Int?
+  visaType         String? // e.g. "Employment visa, 2 years, renewable"
+  description      String
+  requirements     String[]          @default([])
+  benefits         String[]          @default([]) // accommodation, food, air ticket ...
+  documentsNeeded  String[]          @default([])
+  ageMin           Int?
+  ageMax           Int?
+  gender           String? // "Male", "Female" or empty = any
+  experienceYears  Int?
+  // the announced interview (optional)
+  interviewMode    JobInterviewMode?
+  interviewAt      DateTime?
+  interviewPlace   String?
+  interviewNotes   String?
+  deadline         DateTime?         @db.Date // last day to apply
+  featured         Boolean           @default(false)
+  images           String[]          @default([])
+  status           PublishStatus     @default(DRAFT)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  applications JobApplication[]
+
+  @@index([status, region, country])
+}
+
+model JobApplication {
+  id              String               @id @default(uuid())
+  reference       String               @unique
+  status          JobApplicationStatus @default(APPLIED)
+  vacancyId       String
+  vacancy         JobVacancy           @relation(fields: [vacancyId], references: [id])
+  customerId      String
+  customer        Customer             @relation(fields: [customerId], references: [id])
+  dateOfBirth     DateTime?            @db.Date
+  passportNumber  String?
+  passportExpiry  DateTime?            @db.Date
+  experienceYears Int?
+  currentJob      String?
+  message         String?
+  staffNotes      String? // internal, never shown to the candidate
+  rejectReason    String? // shown to the candidate
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  interviews JobInterview[]
+
+  @@unique([vacancyId, customerId]) // one application per job per person
+  @@index([status, createdAt])
+}
+
+model JobInterview {
+  id            String          @id @default(uuid())
+  applicationId String
+  application   JobApplication  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  stage         InterviewStage
+  mode          AppointmentMode @default(IN_PERSON)
+  scheduledAt   DateTime
+  location      String? // address, or the video link
+  interviewer   String? // e.g. "Employer HR team", "UAE Embassy"
+  instructions  String? // shown to the candidate: what to bring ...
+  result        InterviewResult @default(SCHEDULED)
+  feedback      String? // internal
+  createdById   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([applicationId])
+  @@index([scheduledAt])
+}
+
+// ─────────────────────────── Company leadership ───────────────────────────
+// Directors, shareholders and managers shown on the website (About us and
+// Contact pages) so customers can reach management when something goes wrong.
+// Phone numbers are only ever shown for managers.
+
+enum LeadershipRole {
+  DIRECTOR
+  SHAREHOLDER
+  MANAGER
+}
+
+model TeamMember {
+  id           String           @id @default(uuid())
+  name         String
+  roles        LeadershipRole[] // a person can be director and shareholder
+  position     String // e.g. Managing Director, Travel Manager
+  division     Division? // managers: the division they run
+  email        String?
+  phone        String? // managers only - never stored or shown for others
+  bio          String?
+  photo        String?
+  shareholding Decimal?         @db.Decimal(5, 2) // per cent - staff only, never public
+  sortOrder    Int              @default(100)
+  status       PublishStatus    @default(PUBLISHED)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([status, sortOrder])
 }
 
 // ─────────────────────────── Online shop (retail) ───────────────────────────

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { DocumentAccess, QuotationStatus } from "@/app/generated/prisma/enums";
 import { customerAppointmentView } from "@/lib/appointments";
 import { getCustomerForUser } from "@/lib/customers";
+import { candidateApplicationView, DOCUMENTS_OPEN, WITHDRAWABLE } from "@/lib/jobs";
+import { customerRentalView } from "@/lib/rentals";
 import { requireUser } from "@/utils/authentication";
 import { handleError, notFound } from "@/utils/handleError";
 import getPageInfo, { buildPagination } from "@/utils/pageInfoRetrivel";
@@ -12,7 +14,7 @@ type ResourceContext = { params: Promise<{ resource: string }> };
 // Customer account area (SRS 9.1): only the signed-in customer's own records.
 //   /api/me/enquiries  /api/me/quotations  /api/me/orders  /api/me/payments
 //   /api/me/documents  /api/me/travel  /api/me/events  /api/me/messages
-//   /api/me/appointments  /api/me/reviews
+//   /api/me/appointments  /api/me/reviews  /api/me/rentals  /api/me/jobs
 export async function GET(request: NextRequest, { params }: ResourceContext) {
   const { resource } = await params;
   const auth = await requireUser(request);
@@ -206,6 +208,56 @@ export async function GET(request: NextRequest, { params }: ResourceContext) {
           }),
           prisma.review.count({ where: own }),
         ]);
+        break;
+      }
+
+      case "rentals": {
+        const [bookings, count] = await Promise.all([
+          prisma.rentalBooking.findMany({
+            where: mine,
+            skip: page.skip,
+            take: page.take,
+            orderBy: { startDate: "desc" },
+            include: { items: true },
+          }),
+          prisma.rentalBooking.count({ where: mine }),
+        ]);
+        data = bookings.map(customerRentalView); // no staff notes
+        totalCount = count;
+        break;
+      }
+
+      case "jobs": {
+        const [applications, count] = await Promise.all([
+          prisma.jobApplication.findMany({
+            where: mine,
+            ...paging,
+            include: {
+              vacancy: {
+                select: { id: true, slug: true, reference: true, title: true, country: true, city: true, interviewMode: true, interviewAt: true, interviewPlace: true },
+              },
+              interviews: { orderBy: { scheduledAt: "asc" } },
+            },
+          }),
+          prisma.jobApplication.count({ where: mine }),
+        ]);
+        // the CV, passport ... sent with each application (internal ones hidden)
+        const documents = await prisma.document.findMany({
+          where: {
+            entityType: "JOB_APPLICATION",
+            entityId: { in: applications.map((application) => application.id) },
+            accessLevel: { not: DocumentAccess.STAFF },
+          },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, type: true, title: true, fileName: true, approval: true, createdAt: true, entityId: true },
+        });
+        data = applications.map((application) => ({
+          ...candidateApplicationView(application), // no staff notes or feedback
+          canWithdraw: WITHDRAWABLE.includes(application.status),
+          canAddDocuments: DOCUMENTS_OPEN.includes(application.status),
+          documents: documents.filter((document) => document.entityId == application.id),
+        }));
+        totalCount = count;
         break;
       }
 

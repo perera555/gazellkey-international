@@ -239,7 +239,13 @@ export async function getShopCatalogue(
   page: { skip: number; take: number },
 ) {
   const all = await loadItems(filters.kind);
-  const search = filters.search?.toLowerCase();
+  // every search word must start a word in the item ("tea" finds "Ceylon Tea"
+  // and "teapot", not "Steam iron")
+  const searchWords = (filters.search ?? "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => new RegExp(`(^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i"));
 
   // categories of the chosen kind, before the other filters narrow them down
   const categoryCounts = new Map<string, number>();
@@ -249,12 +255,9 @@ export async function getShopCatalogue(
 
   const matching = all
     .filter((item) => {
-      if (search) {
-        const text = [item.name, item.sku, item.category, item.brand, item.summary]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (!text.includes(search)) {
+      if (searchWords.length > 0) {
+        const text = [item.name, item.sku, item.category, item.brand, item.summary].filter(Boolean).join(" ");
+        if (!searchWords.every((word) => word.test(text))) {
           return false;
         }
       }

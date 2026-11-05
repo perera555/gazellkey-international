@@ -100,6 +100,26 @@ export async function resolveDocumentOwner(
       const record = await prisma.shopProduct.findUnique({ where: { id: entityId } });
       return record && { ...none, division: record.division };
     }
+    case EntityType.RENTAL_ITEM: {
+      const record = await prisma.rentalItem.findUnique({ where: { id: entityId } });
+      return record && { ...none, division: Division.EVENTS };
+    }
+    case EntityType.RENTAL_BOOKING: {
+      const record = await prisma.rentalBooking.findUnique({ where: { id: entityId } });
+      return record && { customerId: record.customerId, division: Division.EVENTS, assignedToId: null };
+    }
+    case EntityType.JOB_VACANCY: {
+      const record = await prisma.jobVacancy.findUnique({ where: { id: entityId } });
+      return record && { ...none, division: Division.TRAVEL };
+    }
+    case EntityType.JOB_APPLICATION: {
+      const record = await prisma.jobApplication.findUnique({ where: { id: entityId } });
+      return record && { customerId: record.customerId, division: Division.TRAVEL, assignedToId: null };
+    }
+    case EntityType.TEAM_MEMBER: {
+      const record = await prisma.teamMember.findUnique({ where: { id: entityId } });
+      return record && { ...none, division: null };
+    }
     case EntityType.EVENT: {
       const record = await prisma.event.findUnique({ where: { id: entityId } });
       return record && { ...none, division: Division.EVENTS };

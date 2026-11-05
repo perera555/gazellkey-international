@@ -13,10 +13,13 @@
     "seed:hotels": "tsx prisma/seed-hotels.ts",
     "seed:tours": "tsx prisma/seed-tours.ts",
     "seed:trade": "tsx prisma/seed-trade.ts",
+    "seed:rentals": "tsx prisma/seed-rentals.ts",
+    "seed:jobs": "tsx prisma/seed-jobs.ts",
     "test:api": "node tests/api-flow.mjs",
     "test:shop": "node tests/shop-flow.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "bcryptjs": "^3.0.3",

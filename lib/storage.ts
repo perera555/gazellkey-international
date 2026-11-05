@@ -40,10 +40,13 @@ function matchesSignature(bytes: Uint8Array, mimeType: string) {
   }
 }
 
-export async function saveFile(file: File) {
+// Optional `folder` keeps a kind of file apart (e.g. "team-photos", served
+// publicly); without it files go to a private year/month folder.
+// `imagesOnly` refuses PDFs (photos).
+export async function saveFile(file: File, { folder, imagesOnly = false }: { folder?: string; imagesOnly?: boolean } = {}) {
   const extension = ALLOWED_TYPES[file.type];
-  if (!extension) {
-    throw new ApiError(400, "Only PDF, JPG, PNG and WEBP files are allowed.");
+  if (!extension || (imagesOnly && file.type == "application/pdf")) {
+    throw new ApiError(400, imagesOnly ? "Only JPG, PNG and WEBP pictures are allowed." : "Only PDF, JPG, PNG and WEBP files are allowed.");
   }
   if (file.size > MAX_FILE_SIZE) {
     throw new ApiError(400, "File is larger than 10 MB.");
@@ -55,7 +58,7 @@ export async function saveFile(file: File) {
   }
 
   const now = new Date();
-  const folder = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
+  folder ??= `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
   const storageKey = `${folder}/${randomUUID()}${extension}`;
 
   await mkdir(path.join(STORAGE_DIR, folder), { recursive: true });
