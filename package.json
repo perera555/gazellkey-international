@@ -15,6 +15,7 @@
     "seed:trade": "tsx prisma/seed-trade.ts",
     "seed:rentals": "tsx prisma/seed-rentals.ts",
     "seed:jobs": "tsx prisma/seed-jobs.ts",
+    "seed:fertilizer": "tsx prisma/seed-fertilizer.ts",
     "test:api": "node tests/api-flow.mjs",
     "test:shop": "node tests/shop-flow.mjs"
   },
