@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/app/generated/prisma/client";
 import { PRIVILEGES } from "@/lib/privileges";
+import { ensureMembership } from "@/lib/membership";
 import { CustomerCreateRequestSchema } from "@/types/dto/customer";
 import { requirePrivilege } from "@/utils/authentication";
 import { handleError } from "@/utils/handleError";
@@ -77,6 +78,8 @@ export async function POST(request: NextRequest) {
     const customer = await prisma.customer.create({
       data: { ...body, reference: await nextReference("CUS") },
     });
+    // every customer starts with a Blue (beginner) membership card
+    await ensureMembership(customer.id);
 
     await audit({
       userId: auth.user.id,

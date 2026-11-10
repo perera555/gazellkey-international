@@ -2,7 +2,7 @@ import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Role } from "@/app/generated/prisma/enums";
-import { CustomerSignUpRequestSchema } from "@/types/dto/user";
+import { UserRegistrationRequestSchema } from "@/types/dto/user";
 import { findOrCreateCustomer } from "@/lib/customers";
 import { ensureMembership } from "@/lib/membership";
 import { handleError } from "@/utils/handleError";
@@ -11,7 +11,7 @@ import { handleError } from "@/utils/handleError";
 // administrator through POST /api/users.
 export async function POST(request: NextRequest) {
   try {
-    const body = CustomerSignUpRequestSchema.parse(await request.json());
+    const body = UserRegistrationRequestSchema.parse(await request.json());
 
     const existingUser = await prisma.user.findUnique({
       where: { email: body.email },
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
 
       // link (or create) the customer record so earlier enquiries made
       // with the same email appear in the new account
+      // (a new customer gets a Blue membership card, see lib/customers.ts)
       const customer = await findOrCreateCustomer(
         {
           email: body.email,
@@ -49,10 +50,8 @@ export async function POST(request: NextRequest) {
         },
         tx,
       );
-      // "Become a member" ticked: a membership card in their name
-      if (body.joinMembership) {
-        await ensureMembership(customer.id, tx);
-      }
+      // an existing customer (from an earlier enquiry) gets theirs now
+      await ensureMembership(customer.id, tx);
     });
 
     return NextResponse.json(

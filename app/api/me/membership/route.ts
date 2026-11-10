@@ -7,11 +7,9 @@ import { requireUser } from "@/utils/authentication";
 import { handleError } from "@/utils/handleError";
 import { audit } from "@/utils/audit";
 
+// Every customer has a card; one is created here if it is somehow missing
 async function membershipView(customer: { id: string; firstName: string; lastName: string | null }) {
-  const card = await prisma.membership.findUnique({ where: { customerId: customer.id } });
-  if (card == null) {
-    return null; // not a member yet
-  }
+  const card = await ensureMembership(customer.id);
   const transactions = await prisma.pointsTransaction.findMany({
     where: { membershipId: card.id },
     orderBy: { createdAt: "desc" },
@@ -27,7 +25,7 @@ async function membershipView(customer: { id: string; firstName: string; lastNam
 }
 
 // My account > Membership: the signed-in customer's card, points and history
-// (data is null when they are not a member yet)
+// (data is null only for accounts without a customer record, e.g. staff)
 export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.error) {

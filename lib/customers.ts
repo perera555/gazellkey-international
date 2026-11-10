@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { CustomerType } from "@/app/generated/prisma/enums";
+import { ensureMembership } from "@/lib/membership";
 import { Db, nextReference } from "@/utils/reference";
 
 type CustomerContact = {
@@ -42,7 +43,7 @@ export async function findOrCreateCustomer(
     return existing;
   }
 
-  return db.customer.create({
+  const customer = await db.customer.create({
     data: {
       reference: await nextReference("CUS", db),
       email: email,
@@ -55,6 +56,9 @@ export async function findOrCreateCustomer(
       userId: contact.userId,
     },
   });
+  // every customer starts with a Blue (beginner) membership card
+  await ensureMembership(customer.id, db);
+  return customer;
 }
 
 // The customer record that belongs to a signed-in website user

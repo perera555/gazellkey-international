@@ -82,8 +82,7 @@ async function changePoints(
 }
 
 // A payment just became PAID (inside the same transaction, see lib/payments.ts).
-// Only members earn points: customers join when they register ("Become a
-// member") or later under My account > Membership.
+// Every customer has a card (Blue to start); one is created here if missing.
 export async function awardPurchasePoints(
   tx: Prisma.TransactionClient,
   payment: { id: string; customerId: string; amount: Prisma.Decimal; currency: string; reference: string },
@@ -92,9 +91,9 @@ export async function awardPurchasePoints(
   if (points == 0) {
     return;
   }
-  const membership = await tx.membership.findUnique({ where: { customerId: payment.customerId } });
-  if (membership == null || membership.status != "ACTIVE") {
-    return; // not a member
+  const membership = await ensureMembership(payment.customerId, tx);
+  if (membership.status != "ACTIVE") {
+    return; // card switched off by staff
   }
   const already = await tx.pointsTransaction.findUnique({ where: { paymentId: payment.id } });
   if (already != null) {
