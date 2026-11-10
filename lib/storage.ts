@@ -1,6 +1,7 @@
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { del, get, put } from "@vercel/blob";
 import { ApiError } from "@/utils/handleError";
 
 // Files are kept OUTSIDE /public so nobody can download them without
@@ -8,6 +9,11 @@ import { ApiError } from "@/utils/handleError";
 // To move to S3 / Cloudflare R2 later, only this file needs to change (NFR-11).
 const STORAGE_DIR =
   process.env.STORAGE_DIR || path.join(process.cwd(), "storage");
+
+// On Vercel the disk is temporary, so files go to a private Vercel Blob store
+// instead (BLOB_READ_WRITE_TOKEN is set when a store is connected).
+// Locally, without the token, they stay in STORAGE_DIR.
+const USE_BLOB = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -61,6 +67,11 @@ export async function saveFile(file: File, { folder, imagesOnly = false }: { fol
   folder ??= `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
   const storageKey = `${folder}/${randomUUID()}${extension}`;
 
+  if (USE_BLOB) {
+    await put(storageKey, Buffer.from(bytes), { access: "private", contentType: file.type });
+    return storageKey;
+  }
+
   await mkdir(path.join(STORAGE_DIR, folder), { recursive: true });
   await writeFile(path.join(STORAGE_DIR, storageKey), bytes);
 
@@ -75,13 +86,27 @@ function resolveKey(storageKey: string) {
   return fullPath;
 }
 
-export function readStoredFile(storageKey: string) {
-  return readFile(resolveKey(storageKey));
+export async function readStoredFile(storageKey: string) {
+  const fullPath = resolveKey(storageKey);
+  if (!USE_BLOB) {
+    return readFile(fullPath);
+  }
+  const result = await get(storageKey, { access: "private" });
+  if (result == null || result.statusCode != 200) {
+    // same shape as a missing file on disk, so callers behave the same
+    throw Object.assign(new Error(`File not found: ${storageKey}`), { code: "ENOENT" });
+  }
+  return Buffer.from(await new Response(result.stream).arrayBuffer());
 }
 
 export async function deleteStoredFile(storageKey: string) {
   try {
-    await unlink(resolveKey(storageKey));
+    const fullPath = resolveKey(storageKey);
+    if (USE_BLOB) {
+      await del(storageKey);
+      return;
+    }
+    await unlink(fullPath);
   } catch (error) {
     console.error("Could not delete stored file", storageKey, error);
   }

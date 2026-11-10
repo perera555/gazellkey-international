@@ -140,6 +140,10 @@ export async function resolveDocumentOwner(
       const record = await prisma.supplier.findUnique({ where: { id: entityId } });
       return record && { ...none, division: null };
     }
+    case EntityType.MEMBERSHIP: {
+      const record = await prisma.membership.findUnique({ where: { id: entityId } });
+      return record && { customerId: record.customerId, division: null, assignedToId: null };
+    }
   }
 }
 

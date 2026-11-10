@@ -2,15 +2,16 @@ import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { Role } from "@/app/generated/prisma/enums";
-import { UserRegistrationRequestSchema } from "@/types/dto/user";
+import { CustomerSignUpRequestSchema } from "@/types/dto/user";
 import { findOrCreateCustomer } from "@/lib/customers";
+import { ensureMembership } from "@/lib/membership";
 import { handleError } from "@/utils/handleError";
 
 // Public customer sign-up (FR-SH-04). Staff accounts are created by an
 // administrator through POST /api/users.
 export async function POST(request: NextRequest) {
   try {
-    const body = UserRegistrationRequestSchema.parse(await request.json());
+    const body = CustomerSignUpRequestSchema.parse(await request.json());
 
     const existingUser = await prisma.user.findUnique({
       where: { email: body.email },
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
       // link (or create) the customer record so earlier enquiries made
       // with the same email appear in the new account
-      await findOrCreateCustomer(
+      const customer = await findOrCreateCustomer(
         {
           email: body.email,
           firstName: body.firstName,
@@ -48,6 +49,10 @@ export async function POST(request: NextRequest) {
         },
         tx,
       );
+      // "Become a member" ticked: a membership card in their name
+      if (body.joinMembership) {
+        await ensureMembership(customer.id, tx);
+      }
     });
 
     return NextResponse.json(

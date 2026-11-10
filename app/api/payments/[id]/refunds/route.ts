@@ -6,6 +6,7 @@ import {
   PaymentStatus,
 } from "@/app/generated/prisma/enums";
 import { PRIVILEGES } from "@/lib/privileges";
+import { reversePurchasePoints } from "@/lib/membership";
 import { notifyCustomer } from "@/lib/notifications";
 import { isPayHereApiEnabled, refundPayHerePayment } from "@/lib/payhere";
 import { centsToStripeAmount, getStripe } from "@/lib/stripe";
@@ -113,6 +114,8 @@ export async function POST(request: NextRequest, { params }: IdContext) {
         where: { id: payment.orderId },
         data: { amountPaid: { decrement: body.amount } },
       });
+      // the refunded money no longer earns membership points
+      await reversePurchasePoints(tx, created, payment);
       return created;
     });
 

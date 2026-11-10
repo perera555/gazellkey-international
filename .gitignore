@@ -50,3 +50,6 @@ next-env.d.ts
 
 # uploaded documents (private files)
 /storage
+
+.vercel
+.env*

@@ -153,6 +153,7 @@ enum EntityType {
   SUPPLIER
   SHIPMENT
   APPOINTMENT
+  MEMBERSHIP
 }
 
 enum NotificationChannel {
@@ -372,6 +373,7 @@ model Customer {
   reviews            Review[]
   rentalBookings     RentalBooking[]
   jobApplications    JobApplication[]
+  membership         Membership?
 }
 
 // A customer's star rating and comment, shown on the website at once.
@@ -1202,12 +1204,14 @@ model JobInterview {
 // ─────────────────────────── Company leadership ───────────────────────────
 // Directors, shareholders and managers shown on the website (About us and
 // Contact pages) so customers can reach management when something goes wrong.
+// TEAM = other staff, shown on the Our team page only.
 // Phone numbers are only ever shown for managers.
 
 enum LeadershipRole {
   DIRECTOR
   SHAREHOLDER
   MANAGER
+  TEAM
 }
 
 model TeamMember {
@@ -1227,6 +1231,57 @@ model TeamMember {
   updatedAt    DateTime         @updatedAt
 
   @@index([status, sortOrder])
+}
+
+// ─────────────────────────── Membership & points ───────────────────────────
+// Every customer gets a membership card (lib/membership.ts). Confirmed payments
+// earn points automatically; refunds take them back; staff can add or redeem.
+// The tier follows lifetimePoints, so redeeming never lowers it.
+
+// Card names, lowest first: Blue (on joining), Bronze, Silver, Gold, Platinum
+enum MembershipTier {
+  BLUE
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum PointsReason {
+  PURCHASE // earned from a confirmed payment
+  REFUND // taken back when that payment is refunded
+  REDEMPTION // the customer used points
+  ADJUSTMENT // added or removed by staff (gift, correction)
+}
+
+model Membership {
+  id             String         @id @default(uuid())
+  cardNumber     String         @unique // GKM-2026-00001
+  customerId     String         @unique
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  tier           MembershipTier @default(BLUE)
+  pointsBalance  Int            @default(0)
+  lifetimePoints Int            @default(0)
+  status         RecordStatus   @default(ACTIVE)
+  joinedAt       DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  transactions PointsTransaction[]
+}
+
+model PointsTransaction {
+  id           String       @id @default(uuid())
+  membershipId String
+  membership   Membership   @relation(fields: [membershipId], references: [id])
+  points       Int // + earned / added, - redeemed / taken back
+  reason       PointsReason
+  note         String?
+  paymentId    String?      @unique // PURCHASE: one entry per paid payment
+  refundId     String?      @unique // REFUND: one entry per refund
+  createdById  String? // staff user for REDEMPTION / ADJUSTMENT
+  createdAt    DateTime     @default(now())
+
+  @@index([membershipId, createdAt])
 }
 
 // ─────────────────────────── Online shop (retail) ───────────────────────────

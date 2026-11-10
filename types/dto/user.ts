@@ -24,6 +24,11 @@ export const UserRegistrationRequestSchema = z
   })
   .strict(); // unknown keys such as "role" cause a 400
 
+// Website sign-up: the same, plus the "Become a member" tick (on by default)
+export const CustomerSignUpRequestSchema = UserRegistrationRequestSchema.extend({
+  joinMembership: z.boolean().default(true),
+});
+
 // Admin creates a staff / finance / admin / supplier account
 export const UserCreateByAdminRequestSchema = UserRegistrationRequestSchema.extend(
   {

@@ -1,5 +1,6 @@
 import { Prisma } from "@/app/generated/prisma/client";
 import { OrderStatus, RegistrationStatus } from "@/app/generated/prisma/enums";
+import { awardPurchasePoints } from "@/lib/membership";
 import { markOrderItemsSold } from "@/lib/stock";
 import { toCents } from "@/utils/money";
 
@@ -8,10 +9,13 @@ import { toCents } from "@/utils/money";
 // paid checkout (lib/shop.ts). Call inside the same transaction that
 // changed the payment to PAID.
 // When the order is fully paid, a PENDING order becomes CONFIRMED.
+// The customer's membership card earns points for the payment.
 export async function addPaymentToOrder(
   tx: Prisma.TransactionClient,
-  payment: { orderId: string; amount: Prisma.Decimal },
+  payment: { id: string; orderId: string; customerId: string; amount: Prisma.Decimal; currency: string; reference: string },
 ) {
+  await awardPurchasePoints(tx, payment);
+
   const order = await tx.order.update({
     where: { id: payment.orderId },
     data: { amountPaid: { increment: payment.amount } },
