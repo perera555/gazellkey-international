@@ -1220,6 +1220,7 @@ model TeamMember {
   roles        LeadershipRole[] // a person can be director and shareholder
   position     String // e.g. Managing Director, Travel Manager
   division     Division? // managers: the division they run
+  department   String? // e.g. IT Department, Finance & Accounts (any department, typed or chosen)
   email        String?
   phone        String? // managers only - never stored or shown for others
   bio          String?

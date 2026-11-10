@@ -7,9 +7,10 @@ const optionalText = (max: number) => z.string().trim().max(max).nullable().opti
 // ── Directors, shareholders and managers (admin: Website > Leadership) ──
 const TeamMemberBaseSchema = z.object({
   name: z.string().trim().min(2).max(120),
-  roles: z.array(z.enum(LeadershipRole)).min(1, "Choose at least one role: director, shareholder or manager"),
+  roles: z.array(z.enum(LeadershipRole)).min(1, "Choose at least one role: director, shareholder, manager or team"),
   position: z.string().trim().min(2).max(120),
   division: z.enum(Division).nullable().optional(),
+  department: optionalText(80), // IT Department, Travel Services ... (chosen or typed)
   email: z.union([z.email("Please enter a valid email address").trim().toLowerCase(), z.literal("")]).nullable().optional(),
   phone: optionalText(30), // kept only for managers
   bio: optionalText(1000),
